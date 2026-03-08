@@ -1,5 +1,4 @@
 import pygame
-import math
 import config
 
 pygame.font.init()
@@ -87,3 +86,41 @@ def draw_tooltip(surface, hovered_joker, mouse_x, mouse_y):
     
     desc_surf = FONT_12.render(hovered_joker.desc, True, config.COLOR_WHITE)
     surface.blit(desc_surf, (tip_x + 10, tip_y - height + 40))
+
+
+# --- NEW: CRT Overlay Class ---
+class CRTOverlay:
+    def __init__(self, width, height):
+        self.width = width
+        self.height = height
+        
+        # Create the scanline surface
+        self.overlay = pygame.Surface((width, height), pygame.SRCALPHA)
+        
+        # Draw horizontal scanlines
+        for y in range(0, height, 8):
+            pygame.draw.line(self.overlay, (0, 0, 0, 60), (0, y), (width, y), 3)
+            
+        # Draw a subtle darkened vignette around the edges
+        vignette = pygame.Surface((width, height), pygame.SRCALPHA)
+        # Fill with black-ish shadow
+        # pygame.draw.rect(vignette, (0, 0, 0, 150), (0, 0, width, height))
+        # Cut a massive transparent hole in the center
+        # pygame.draw.ellipse(vignette, (0, 0, 0, 0), (-200, -100, width + 400, height + 200))
+        
+        self.overlay.blit(vignette, (0, 0))
+        
+        # For animating the scanlines moving downwards
+        self.y_offset = 0.0
+
+    def update(self, delta_time):
+        """ Progresses the scanline animation """
+        self.y_offset += 10 * delta_time
+        if self.y_offset >= 4:
+            self.y_offset = 0
+
+    def draw(self, screen):
+        """ Draws the overlay onto the target screen """
+        screen.blit(self.overlay, (0, int(self.y_offset)))
+        # Blit a second time slightly offset to seamlessly loop the moving lines
+        screen.blit(self.overlay, (0, int(self.y_offset) - 4))

@@ -66,6 +66,9 @@ class WarGame:
         self.mouse_x = 0
         self.mouse_y = 0
 
+        # Initialize the CRT overlay
+        self.crt_overlay = ui_elements.CRTOverlay(config.SCREEN_WIDTH, config.SCREEN_HEIGHT)
+
     def setup(self):
         self.score_total = 0
         self.round_level = 1
@@ -484,18 +487,20 @@ class WarGame:
                 if cards_clicked: cards_clicked[-1].is_selected = not cards_clicked[-1].is_selected
 
     def on_update(self, delta_time):
-        self.audio_manager.update(delta_time)
-        
-        # --- FIXED: ADDED DELTA_TIME WHERE NEEDED AND ADDED HAND_LIST ---
-        self.card_list.update(delta_time)
-        self.hand_list.update(delta_time) 
-        self.joker_list.update(delta_time)
-        self.shop_list.update(delta_time) 
-        self.animating_cards.update(delta_time) 
-        if self.state == GameState.PACK_OPENING:
-            self.pack_card_list.update(delta_time)
-        
-        self.update_game_buttons()
+            self.audio_manager.update(delta_time)
+            
+            # NEW: Update the CRT animation
+            self.crt_overlay.update(delta_time)
+            
+            self.card_list.update(delta_time)
+            self.hand_list.update(delta_time) 
+            self.joker_list.update(delta_time)
+            self.shop_list.update(delta_time) 
+            self.animating_cards.update(delta_time) 
+            if self.state == GameState.PACK_OPENING:
+                self.pack_card_list.update(delta_time)
+            
+            self.update_game_buttons()
 
     def draw_game_contents(self):
         pygame.draw.rect(self.screen, config.COLOR_UI_BG, (0, 0, config.SCREEN_WIDTH, 80))
@@ -606,8 +611,11 @@ class WarGame:
         for card in self.animating_cards: card.draw_modifier(self.screen)
 
     def on_draw(self):
-        self.screen.fill(config.COLOR_BG)
-        self.draw_game_contents()
+            self.screen.fill(config.COLOR_BG)
+            self.draw_game_contents()
+            
+            # NEW: Draw the CRT overlay over everything else at the very end
+            self.crt_overlay.draw(self.screen)
 
 if __name__ == "__main__":
     game = WarGame()
