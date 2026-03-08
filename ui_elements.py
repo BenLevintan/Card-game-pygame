@@ -98,7 +98,7 @@ class CRTOverlay:
         self.overlay = pygame.Surface((width, height), pygame.SRCALPHA)
         
         # Draw horizontal scanlines
-        for y in range(0, int(height * 1.1), 20):
+        for y in range(0, height + 20, 20):
             pygame.draw.line(self.overlay, (0, 0, 0, 60), (0, y), (width, y), 10)
             
         # Draw a subtle darkened vignette around the edges
@@ -121,6 +121,6 @@ class CRTOverlay:
 
     def draw(self, screen):
         """ Draws the overlay onto the target screen """
-        screen.blit(self.overlay, (0, int(self.y_offset) - 20))
+        screen.blit(self.overlay, (0, int(self.y_offset) - 40))
         # Blit a second time slightly offset to seamlessly loop the moving lines
-        screen.blit(self.overlay, (0, int(self.y_offset) - 4))
+        screen.blit(self.overlay, (0, int(self.y_offset) - 24))
