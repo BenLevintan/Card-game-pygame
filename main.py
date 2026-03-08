@@ -1,0 +1,615 @@
+import pygame
+import sys
+import enum
+import warnings
+
+warnings.filterwarnings("ignore") 
+
+import config
+import sprites
+import ui_elements
+import systems
+import scoring
+
+class GameState(enum.Enum):
+    DRAWING = 1
+    DECIDING = 2
+    SHOPPING = 3
+    PACK_OPENING = 4 
+    GAME_OVER = 5
+
+class WarGame:
+    def __init__(self):
+        pygame.init()
+        self.screen = pygame.display.set_mode((config.SCREEN_WIDTH, config.SCREEN_HEIGHT))
+        pygame.display.set_caption(config.SCREEN_TITLE)
+        self.clock = pygame.time.Clock()
+        
+        self.deck_manager = None
+        self.shop_manager = systems.ShopManager()
+        self.audio_manager = systems.AudioManager() 
+
+        # Pygame Groups
+        self.card_list = pygame.sprite.Group()
+        self.hand_list = pygame.sprite.Group()
+        self.joker_list = pygame.sprite.Group()
+        self.shop_list = pygame.sprite.Group()
+        self.pack_card_list = pygame.sprite.Group()
+        self.animating_cards = pygame.sprite.Group() 
+        self.drawn_card = None
+        
+        self.state = GameState.DRAWING
+        self.score_total = 0
+        self.hands_played = 0
+        self.hands_max = config.BASE_HANDS_TO_PLAY
+        self.discards_left = config.MAX_DISCARDS
+        self.target_score = config.BASE_TARGET_SCORE
+        self.round_level = 1
+        self.coins = 5 
+        self.run_discards = 0 
+        
+        self.message = ""
+        self.hand_details = [] 
+        
+        self.btn_action = None 
+        self.btn_score = None
+        self.btn_next_round = None
+        self.btn_sell = ui_elements.TextButton(0, 0, 100, 40, "SELL", config.COLOR_BTN_SELL)
+        self.btn_sell.visible = False
+        self.shop_buttons = []
+        
+        self.btn_pack_skip = None
+        self.btn_pack_mods = [] 
+        self.pack_modifiers_offered = [] 
+        
+        self.hovered_joker = None 
+        self.mouse_x = 0
+        self.mouse_y = 0
+
+    def setup(self):
+        self.score_total = 0
+        self.round_level = 1
+        self.target_score = config.BASE_TARGET_SCORE
+        self.coins = 99995  
+        self.run_discards = 0
+        
+        self.joker_list.empty()
+        self.animating_cards.empty()
+        self.deck_manager = systems.DeckManager()
+        
+        self.audio_manager.start_bg_music() 
+        self.start_new_round()
+
+    def start_new_round(self):
+        self.state = GameState.DRAWING
+        self.card_list.empty()
+        self.hand_list.empty()
+        self.shop_list.empty()
+        self.pack_card_list.empty()
+        self.shop_buttons = []
+        
+        self.audio_manager.exit_store() 
+        
+        bonus_hands = sum(1 for j in self.joker_list if j.key == "helping_hand")
+        bonus_discards = sum(1 for j in self.joker_list if j.key == "mulligan")
+        
+        self.hands_max = config.BASE_HANDS_TO_PLAY + bonus_hands
+        self.discards_left = config.MAX_DISCARDS + bonus_discards
+        
+        self.hands_played = 0
+        self.score_total = 0
+        self.message = "" 
+        self.hand_details = []
+        
+        self.deck_manager.start_round(self.card_list)
+
+        self.btn_action = ui_elements.TextButton(config.SCREEN_WIDTH/2, config.SCREEN_HEIGHT - 320, 240, 50, "TAKE CARD", config.COLOR_BTN_ACTION)
+        self.btn_score = ui_elements.TextButton(config.SCREEN_WIDTH - 150, config.SCREEN_HEIGHT - 150, 200, 60, "SCORE HAND", config.COLOR_BTN_SCORE)
+        
+        self.draw_new_card()
+
+    def draw_new_card(self):
+        card = self.deck_manager.draw_card(self.card_list)
+        
+        if card:
+            self.audio_manager.play_card_sound()
+            
+            start_x = config.SCREEN_WIDTH + 150
+            start_y = config.DRAWN_CARD_Y
+            card._phys_x, card._phys_y = start_x, start_y
+            card.target_x = config.DRAWN_CARD_X
+            card.target_y = config.DRAWN_CARD_Y
+            
+            self.drawn_card = card
+            self.state = GameState.DECIDING
+        else:
+            self.message = "DECK EMPTY!"
+
+    def enter_shop(self):
+        self.state = GameState.SHOPPING
+        self.message = "SHOP PHASE"
+        
+        self.audio_manager.enter_store()
+        
+        hands_left = max(0, self.hands_max - self.hands_played)
+        reward = (hands_left * 2) + (self.discards_left * 1)
+        self.coins += reward
+        
+        bonus_discards = sum(1 for j in self.joker_list if j.key == "mulligan")
+        start_discards = config.MAX_DISCARDS + bonus_discards
+        
+        nr_bonus = 0
+        if self.discards_left == start_discards:
+            nr_count = sum(1 for j in self.joker_list if j.key == "national_reserve")
+            if nr_count > 0:
+                nr_bonus = nr_count * 3
+                self.coins += nr_bonus
+                
+        harvest_count = sum(1 for j in self.joker_list if j.key == "the_harvest")
+        harvest_bonus = harvest_count * 5
+        if harvest_bonus > 0:
+            self.coins += harvest_bonus
+
+        self.message = f"Round Cleared!\nEarned ${reward}."
+        if nr_bonus > 0: self.message += f"\n(Reserve: +${nr_bonus})"
+        if harvest_bonus > 0: self.message += f"\n(Harvest: +${harvest_bonus})"
+
+        self.shop_manager.generate_shop(self.shop_list, self.shop_buttons, self.joker_list)
+        
+        self.btn_next_round = ui_elements.TextButton(config.SCREEN_WIDTH - 150, 80, 200, 60, "NEXT LEVEL >", config.COLOR_GREEN)
+        self.update_shop_buttons()
+
+    def update_shop_buttons(self):
+        for i, item in enumerate(self.shop_list):
+            if i < len(self.shop_buttons):
+                btn = self.shop_buttons[i]
+                if self.coins < item.cost:
+                    btn.active = False
+                    btn.text = f"Need ${item.cost}"
+                else:
+                    btn.active = True
+                    btn.text = f"BUY ${item.cost}"
+
+    def buy_shop_item(self, index):
+        if index >= len(self.shop_list): return
+        item = list(self.shop_list)[index]
+        
+        if self.coins >= item.cost:
+            if isinstance(item, sprites.Joker):
+                if len(self.joker_list) < config.MAX_JOKERS:
+                    self.coins -= item.cost
+                    item.kill()
+                    self.joker_list.add(item)
+                    self.reposition_jokers() 
+                    self.shop_buttons.pop(index)
+                    self.update_shop_buttons()
+                    self.audio_manager.play_buy_joker_fx() 
+                else:
+                    self.message = "Inventory Full!"
+            
+            elif isinstance(item, sprites.Pack):
+                self.coins -= item.cost
+                item.kill()
+                self.shop_buttons.pop(index)
+                self.start_pack_opening()
+
+    def start_pack_opening(self):
+        self.state = GameState.PACK_OPENING
+        self.message = "Select Cards then Choose Modifier"
+        self.pack_card_list.empty()
+        self.btn_pack_mods = []
+        
+        self.audio_manager.play_mod_fx() 
+        
+        chosen_cards = self.shop_manager.get_pack_cards(self.deck_manager.master_deck)
+        
+        start_x = config.SCREEN_WIDTH / 2 - 250
+        start_y = config.SCREEN_HEIGHT / 2 - 100
+        for i, card in enumerate(chosen_cards):
+            self.pack_card_list.add(card)
+            card.is_selected = False
+            
+            row = i // 4
+            col = i % 4
+            tx = start_x + (col * (config.CARD_WIDTH + 20))
+            ty = start_y + (row * (config.CARD_HEIGHT + 20))
+            
+            card._phys_x, card._phys_y = config.SCREEN_WIDTH + 100, ty
+            card.target_x, card.target_y = tx, ty
+
+        self.pack_modifiers_offered = self.shop_manager.get_pack_modifiers()
+        
+        bx = config.SCREEN_WIDTH / 2 - 100
+        by = config.SCREEN_HEIGHT - 150 
+        for i, mod_key in enumerate(self.pack_modifiers_offered):
+            data = config.MODIFIER_DATA[mod_key]
+            btn = ui_elements.TextButton(bx + (i * 200), by, 180, 60, data['name'], data['color'])
+            self.btn_pack_mods.append(btn)
+            
+        self.btn_pack_skip = ui_elements.TextButton(config.SCREEN_WIDTH - 100, 50, 100, 40, "SKIP", config.COLOR_BTN_DEFAULT)
+
+    def apply_pack_modifier(self, mod_index):
+        selected = [c for c in self.pack_card_list if c.is_selected]
+        if not selected:
+            self.message = "Select cards first!"
+            return
+            
+        mod_key = self.pack_modifiers_offered[mod_index]
+        self.audio_manager.play_mod_fx() 
+        
+        for card in selected:
+            card.modifier = mod_key
+            card.is_selected = False
+            
+            if mod_key == "destroy":
+                card.is_spasming = True
+            else:
+                card.target_y = -400 
+                card.should_despawn = True
+            
+            self.pack_card_list.remove(card)
+            self.animating_cards.add(card)
+            
+        self.state = GameState.SHOPPING
+        self.pack_card_list.empty() 
+        self.message = "Applied!"
+
+    def score_hand(self):
+        self.audio_manager.play_hand_fx()
+        cards_in_deck = len(self.deck_manager.draw_pile)
+        
+        base, multi, desc, coin_bonus = scoring.calculate_hand_score(
+            list(self.hand_list), list(self.joker_list), self.run_discards, cards_in_deck, self.coins
+        )
+        final_score = base * multi
+        self.score_total += final_score
+        
+        if coin_bonus > 0: self.coins += coin_bonus
+        
+        for card in list(self.hand_list): 
+            self.hand_list.remove(card)
+            self.deck_manager.discard_pile.append(card) 
+            card.target_y = config.SCREEN_HEIGHT + 300 
+            card.should_despawn = True
+            self.animating_cards.add(card)
+            
+        if self.score_total >= self.target_score:
+            self.enter_shop()
+            return
+
+        self.hands_played += 1
+        if self.hands_played >= self.hands_max:
+            self.state = GameState.GAME_OVER
+            self.audio_manager.enter_game_over() 
+        else:
+            self.message = f"Scored {final_score}! ({base} x {multi})"
+            if coin_bonus > 0: self.message += f" Earned ${coin_bonus}!"
+
+    def process_swap(self):
+        to_remove = [c for c in self.hand_list if c.is_selected]
+        if len(to_remove) > 0:
+            if self.discards_left > 0:
+                self.discards_left -= 1
+            else:
+                return 
+        
+        self.run_discards += len(to_remove)
+
+        sev_pack_count = sum(1 for j in self.joker_list if j.key == "severance_package")
+        if sev_pack_count > 0:
+            faces_discarded = sum(1 for c in to_remove if c.value in [11, 12, 13])
+            if faces_discarded > 0:
+                self.coins += faces_discarded * 2 * sev_pack_count
+
+        for card in to_remove:
+            self.hand_list.remove(card)
+            self.deck_manager.discard_pile.append(card)
+            card.target_y = config.SCREEN_HEIGHT + 300 
+            card.should_despawn = True 
+            self.animating_cards.add(card)
+        
+        if self.drawn_card:
+            self.hand_list.add(self.drawn_card)
+            self.card_list.remove(self.drawn_card)
+            self.drawn_card = None
+            self.reposition_hand()
+            self.draw_new_card()
+
+    def update_game_buttons(self):
+        if self.state == GameState.GAME_OVER:
+            self.btn_action.visible = False
+            self.btn_score.visible = False
+            return
+        
+        self.btn_action.visible = True
+        self.btn_score.visible = True
+
+        num_selected = len([c for c in self.hand_list if c.is_selected])
+        if num_selected > 0:
+            self.btn_action.text = f"DISCARD ({num_selected}) & TAKE"
+            self.btn_action.base_color = (220, 20, 60)
+            self.btn_action.active = True
+        else:
+            self.btn_action.text = "TAKE CARD"
+            self.btn_action.base_color = config.COLOR_BTN_ACTION
+            if len(self.hand_list) >= config.MAX_HAND_SIZE:
+                self.btn_action.active = False
+                self.btn_action.text = "HAND FULL"
+            else:
+                self.btn_action.active = True
+
+        if len(self.hand_list) > 0:
+            cards_in_deck = len(self.deck_manager.draw_pile)
+            s, m, desc, coin_bonus = scoring.calculate_hand_score(
+                list(self.hand_list), list(self.joker_list), self.run_discards, cards_in_deck, self.coins
+            )
+            total = s * m
+            self.btn_score.text = f"PLAY HAND\n{s} x {m} = {total}"
+            if coin_bonus > 0: self.btn_score.text += f"\n(+${coin_bonus})"
+            self.hand_details = desc
+            self.btn_score.active = True
+        else:
+            self.btn_score.text = "PLAY HAND"
+            self.hand_details = []
+            self.btn_score.active = False
+
+    def reposition_hand(self):
+        sorted_hand = sorted(list(self.hand_list), key=lambda c: (c.value, c.suit))
+        start_x = (config.SCREEN_WIDTH - (len(sorted_hand) * (config.CARD_WIDTH + 20))) / 2 + config.CARD_WIDTH / 2
+        for i, card in enumerate(sorted_hand):
+            card.target_x = start_x + i * (config.CARD_WIDTH + 20)
+            card.target_y = config.HAND_Y
+            card.is_selected = False
+
+    def reposition_jokers(self):
+        start_x = config.SCREEN_WIDTH - 100
+        for i, joker in enumerate(self.joker_list):
+            tx = start_x - (i * (config.JOKER_WIDTH + 50))
+            joker.target_x = tx
+            joker.target_y = config.JOKER_Y
+
+    def sell_joker(self):
+        to_sell = [j for j in self.joker_list if j.is_selected]
+        for joker in to_sell:
+            self.coins += joker.sell_price
+            joker.kill()
+        
+        self.reposition_jokers()
+        self.btn_sell.visible = False
+        
+        if self.state == GameState.SHOPPING:
+            self.update_shop_buttons()
+
+    def run(self):
+        while True:
+            dt = self.clock.tick(60) / 1000.0
+            
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    sys.exit()
+                elif event.type == pygame.MOUSEMOTION:
+                    self.mouse_x, self.mouse_y = event.pos
+                    self.on_mouse_motion(self.mouse_x, self.mouse_y)
+                elif event.type == pygame.MOUSEBUTTONDOWN:
+                    if event.button == 1: 
+                        self.on_mouse_press(*event.pos)
+                        
+            self.on_update(dt)
+            self.on_draw()
+            pygame.display.flip()
+
+    def on_mouse_motion(self, x, y):
+        self.hovered_joker = None
+        check_lists = [self.joker_list.sprites()]
+        if self.state == GameState.SHOPPING: check_lists.append(self.shop_list.sprites())
+            
+        for sprite_list in check_lists:
+            for sprite in sprite_list:
+                if sprite.rect.collidepoint(x, y):
+                    self.hovered_joker = sprite
+                    break
+
+        if self.state == GameState.SHOPPING:
+            for btn in self.shop_buttons: btn.check_mouse_hover(x, y)
+            if self.btn_next_round: self.btn_next_round.check_mouse_hover(x, y)
+        elif self.state == GameState.PACK_OPENING:
+            for btn in self.btn_pack_mods: btn.check_mouse_hover(x, y)
+            self.btn_pack_skip.check_mouse_hover(x, y)
+        else:
+            if self.btn_action: self.btn_action.check_mouse_hover(x, y)
+            if self.btn_score: self.btn_score.check_mouse_hover(x, y)
+        
+        if self.btn_sell.visible: self.btn_sell.check_mouse_hover(x, y)
+
+    def on_mouse_press(self, x, y):
+        if self.btn_sell.visible and self.btn_sell.is_clicked(x, y):
+            self.sell_joker()
+            return
+        
+        clicked_jokers = [j for j in self.joker_list if j.rect.collidepoint(x, y)]
+        if clicked_jokers:
+            for j in self.joker_list: j.is_selected = False
+            clicked_jokers[-1].is_selected = True
+            self.btn_sell.rect.center = (clicked_jokers[-1].rect.centerx, clicked_jokers[-1].rect.centery + 80)
+            self.btn_sell.text = f"SELL ${clicked_jokers[-1].sell_price}"
+            self.btn_sell.visible = True
+            return
+        else:
+            for j in self.joker_list: j.is_selected = False
+            self.btn_sell.visible = False
+
+        if self.state == GameState.SHOPPING:
+            for i, btn in enumerate(self.shop_buttons):
+                if btn.is_clicked(x, y):
+                    self.buy_shop_item(i)
+                    return
+            if self.btn_next_round and self.btn_next_round.is_clicked(x, y):
+                self.round_level += 1
+                self.target_score = int(self.target_score * 1.5)
+                self.start_new_round()
+                return
+
+        elif self.state == GameState.PACK_OPENING:
+            if self.btn_pack_skip.is_clicked(x, y):
+                self.state = GameState.SHOPPING
+                self.pack_card_list.empty()
+                return
+            for i, btn in enumerate(self.btn_pack_mods):
+                if btn.is_clicked(x, y):
+                    self.apply_pack_modifier(i)
+                    return
+            hit = [c for c in self.pack_card_list if c.rect.collidepoint(x, y)]
+            if hit:
+                card = hit[-1]
+                if card.is_selected: card.is_selected = False
+                else:
+                    num_selected = len([c for c in self.pack_card_list if c.is_selected])
+                    if num_selected < 2: card.is_selected = True
+                    else: self.message = "Select only 2 cards!"
+
+        elif self.state == GameState.GAME_OVER:
+            self.setup()
+            return
+
+        elif self.state in [GameState.DECIDING, GameState.DRAWING]:
+            if self.btn_action and self.btn_action.is_clicked(x, y):
+                self.process_swap()
+                return
+            if self.btn_score and self.btn_score.is_clicked(x, y):
+                self.score_hand()
+                return
+            if self.state == GameState.DECIDING and self.discards_left > 0:
+                cards_clicked = [c for c in self.hand_list if c.rect.collidepoint(x, y)]
+                if cards_clicked: cards_clicked[-1].is_selected = not cards_clicked[-1].is_selected
+
+    def on_update(self, delta_time):
+        self.audio_manager.update(delta_time)
+        
+        # --- FIXED: ADDED DELTA_TIME WHERE NEEDED AND ADDED HAND_LIST ---
+        self.card_list.update(delta_time)
+        self.hand_list.update(delta_time) 
+        self.joker_list.update(delta_time)
+        self.shop_list.update(delta_time) 
+        self.animating_cards.update(delta_time) 
+        if self.state == GameState.PACK_OPENING:
+            self.pack_card_list.update(delta_time)
+        
+        self.update_game_buttons()
+
+    def draw_game_contents(self):
+        pygame.draw.rect(self.screen, config.COLOR_UI_BG, (0, 0, config.SCREEN_WIDTH, 80))
+        
+        lvl_surf = ui_elements.FONT_16.render(f"Lvl: {self.round_level}", True, config.COLOR_WHITE)
+        self.screen.blit(lvl_surf, (20, 30))
+        
+        target_surf = ui_elements.FONT_20.render(f"Target: {self.score_total} / {self.target_score}", True, config.COLOR_WHITE)
+        self.screen.blit(target_surf, (150, 30))
+        
+        coin_surf = ui_elements.FONT_20.render(f"Coins: ${self.coins}", True, config.COLOR_GOLD)
+        self.screen.blit(coin_surf, (config.SCREEN_WIDTH//2 - coin_surf.get_width()//2, 30))
+
+        if self.state != GameState.GAME_OVER:
+            hands_surf = ui_elements.FONT_16.render(f"Hands: {self.hands_max - self.hands_played}", True, config.COLOR_WHITE)
+            self.screen.blit(hands_surf, (config.SCREEN_WIDTH - 250, 20))
+            
+            c_disc = config.COLOR_BTN_ACTION if self.discards_left > 0 else config.COLOR_RED
+            disc_surf = ui_elements.FONT_16.render(f"Discards: {self.discards_left}", True, c_disc)
+            self.screen.blit(disc_surf, (config.SCREEN_WIDTH - 250, 50))
+
+        if self.state == GameState.SHOPPING:
+            msg_surf = ui_elements.FONT_20.render(self.message, True, config.COLOR_WHITE)
+            self.screen.blit(msg_surf, (config.SCREEN_WIDTH//2 - msg_surf.get_width()//2, 150))
+            ui_elements.draw_shadows(self.screen, self.shop_list)
+            self.shop_list.draw(self.screen)
+            for btn in self.shop_buttons: btn.draw(self.screen)
+            if self.btn_next_round: self.btn_next_round.draw(self.screen)
+
+        elif self.state == GameState.PACK_OPENING:
+            msg_surf = ui_elements.FONT_20.render(self.message, True, config.COLOR_WHITE)
+            self.screen.blit(msg_surf, (config.SCREEN_WIDTH//2 - msg_surf.get_width()//2, 120))
+            ui_elements.draw_shadows(self.screen, self.pack_card_list)
+            self.pack_card_list.draw(self.screen)
+            for card in self.pack_card_list:
+                card.draw_modifier(self.screen)
+                if card.is_selected:
+                    pygame.draw.rect(self.screen, config.COLOR_GREEN, card.rect, 4, border_radius=8)
+            for btn in self.btn_pack_mods: btn.draw(self.screen)
+            self.btn_pack_skip.draw(self.screen)
+
+        elif self.state == GameState.GAME_OVER:
+            overlay = pygame.Surface((config.SCREEN_WIDTH, config.SCREEN_HEIGHT), pygame.SRCALPHA)
+            overlay.fill((0, 0, 0, 180))
+            self.screen.blit(overlay, (0,0))
+            
+            go_surf = ui_elements.FONT_20.render("GAME OVER", True, config.COLOR_RED)
+            fs_surf = ui_elements.FONT_20.render(f"Final Score: {self.score_total}", True, config.COLOR_WHITE)
+            rs_surf = ui_elements.FONT_16.render("Click to Restart", True, (150, 150, 150))
+            
+            self.screen.blit(go_surf, (config.SCREEN_WIDTH//2 - go_surf.get_width()//2, config.SCREEN_HEIGHT//2 - 50))
+            self.screen.blit(fs_surf, (config.SCREEN_WIDTH//2 - fs_surf.get_width()//2, config.SCREEN_HEIGHT//2))
+            self.screen.blit(rs_surf, (config.SCREEN_WIDTH//2 - rs_surf.get_width()//2, config.SCREEN_HEIGHT//2 + 50))
+
+        else: 
+            if self.message:
+                msg_surf = ui_elements.FONT_16.render(self.message, True, config.COLOR_WHITE)
+                self.screen.blit(msg_surf, (config.SCREEN_WIDTH//2 - msg_surf.get_width()//2, config.DRAWN_CARD_Y - 100))
+            
+            cur_deck, total_deck = self.deck_manager.get_deck_counts()
+            deck_surf = ui_elements.FONT_16.render(f"Deck: {cur_deck} / {total_deck}", True, config.COLOR_WHITE)
+            self.screen.blit(deck_surf, (config.DRAWN_CARD_X - deck_surf.get_width()//2, config.DRAWN_CARD_Y + 130))
+
+            start_y = config.SCREEN_HEIGHT - 300
+            for i, line in enumerate(self.hand_details):
+                line_surf = ui_elements.FONT_16.render(line, True, config.COLOR_GOLD)
+                self.screen.blit(line_surf, (config.SCREEN_WIDTH - 200, start_y + (i * 25)))
+
+            start_x = (config.SCREEN_WIDTH - (config.MAX_HAND_SIZE * (config.CARD_WIDTH + 20))) / 2 + config.CARD_WIDTH / 2
+            for i in range(config.MAX_HAND_SIZE):
+                slot_x = start_x + i * (config.CARD_WIDTH + 20)
+                pygame.draw.rect(self.screen, config.COLOR_GREEN, (slot_x - config.CARD_WIDTH/2, config.HAND_Y - config.CARD_HEIGHT/2, config.CARD_WIDTH, config.CARD_HEIGHT), 2, border_radius=8)
+            
+            if self.state != GameState.GAME_OVER:
+                pygame.draw.rect(self.screen, config.COLOR_WHITE, (config.DRAWN_CARD_X - config.CARD_WIDTH/2 - 5, config.DRAWN_CARD_Y - config.CARD_HEIGHT/2 - 5, config.CARD_WIDTH + 10, config.CARD_HEIGHT + 10), 2, border_radius=8)
+                nc_surf = ui_elements.FONT_12.render("NEW CARD", True, config.COLOR_WHITE)
+                self.screen.blit(nc_surf, (config.DRAWN_CARD_X - nc_surf.get_width()//2, config.DRAWN_CARD_Y - 120))
+
+            # --- FIXED: Draw Both Hand and Deck ---
+            ui_elements.draw_shadows(self.screen, self.card_list)
+            self.card_list.draw(self.screen)
+            for card in self.card_list: card.draw_modifier(self.screen)
+            
+            ui_elements.draw_shadows(self.screen, self.hand_list)
+            self.hand_list.draw(self.screen)
+            
+            for card in self.hand_list:
+                card.draw_modifier(self.screen)
+                if card.is_selected:
+                    pygame.draw.rect(self.screen, config.COLOR_RED, card.rect, 4, border_radius=8)
+
+            if self.btn_action: self.btn_action.draw(self.screen)
+            if self.btn_score: self.btn_score.draw(self.screen)
+
+        ui_elements.draw_shadows(self.screen, self.joker_list)
+        self.joker_list.draw(self.screen)
+        
+        for joker in self.joker_list:
+            if joker.is_selected:
+                pygame.draw.rect(self.screen, config.COLOR_BTN_SELL, joker.rect, 2)
+                
+        if self.btn_sell.visible: self.btn_sell.draw(self.screen)
+
+        ui_elements.draw_tooltip(self.screen, self.hovered_joker, self.mouse_x, self.mouse_y)
+        
+        ui_elements.draw_shadows(self.screen, self.animating_cards)
+        self.animating_cards.draw(self.screen)
+        for card in self.animating_cards: card.draw_modifier(self.screen)
+
+    def on_draw(self):
+        self.screen.fill(config.COLOR_BG)
+        self.draw_game_contents()
+
+if __name__ == "__main__":
+    game = WarGame()
+    game.setup()
+    game.run()
