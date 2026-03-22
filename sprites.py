@@ -93,8 +93,9 @@ class Card(pygame.sprite.Sprite):
         
         # Load fonts (using system fonts that support symbols)
         pygame.font.init()
-        font_small = pygame.font.SysFont(['segoeui', 'dejavusans', 'arial'], 28, bold=True)
-        font_large = pygame.font.SysFont(['segoeui', 'dejavusans', 'arial'], 65)
+        # Pygbag Fix: Requesting non-existent system fonts silently crashes WASM font rendering. Use default (None).
+        font_small = pygame.font.SysFont(None, 28, bold=True)
+        font_large = pygame.font.SysFont(None, 65)
         
         text_color = (220, 30, 30) if self.color_type == 'Red' else (30, 30, 30)
         

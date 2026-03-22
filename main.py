@@ -2,6 +2,7 @@ import pygame
 import sys
 import enum
 import warnings
+import asyncio
 
 warnings.filterwarnings("ignore") 
 
@@ -21,8 +22,18 @@ class GameState(enum.Enum):
 class WarGame:
     def __init__(self):
         pygame.init()
-        self.screen = pygame.display.set_mode((config.SCREEN_WIDTH, config.SCREEN_HEIGHT))
+        # Create the actual display, but use an off-screen Surface for all drawing
+        self.real_display = pygame.display.set_mode((config.SCREEN_WIDTH, config.SCREEN_HEIGHT))
+        
+        # Pygbag Fix: Draw directly to the canvas in WebAssembly to avoid massive texture upload failures
+        if sys.platform in ("emscripten", "wasi"):
+            self.screen = self.real_display
+        else:
+            self.screen = pygame.Surface((config.SCREEN_WIDTH, config.SCREEN_HEIGHT)).convert()
         pygame.display.set_caption(config.SCREEN_TITLE)
+        
+        # Initialize UI fonts AFTER the display is created to prevent WASM invalidation
+        ui_elements.init_fonts()
         self.clock = pygame.time.Clock()
         
         self.deck_manager = None
@@ -383,24 +394,36 @@ class WarGame:
         if self.state == GameState.SHOPPING:
             self.update_shop_buttons()
 
-    def run(self):
-        while True:
-            dt = self.clock.tick(60) / 1000.0
-            
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    pygame.quit()
-                    sys.exit()
-                elif event.type == pygame.MOUSEMOTION:
-                    self.mouse_x, self.mouse_y = event.pos
-                    self.on_mouse_motion(self.mouse_x, self.mouse_y)
-                elif event.type == pygame.MOUSEBUTTONDOWN:
-                    if event.button == 1: 
-                        self.on_mouse_press(*event.pos)
-                        
-            self.on_update(dt)
-            self.on_draw()
+    async def run(self):
+        try:
+            while True:
+                dt = self.clock.tick(60) / 1000.0
+                
+                for event in pygame.event.get():
+                    if event.type == pygame.QUIT:
+                        return
+                    elif event.type == pygame.MOUSEMOTION:
+                        self.mouse_x, self.mouse_y = event.pos
+                        self.on_mouse_motion(self.mouse_x, self.mouse_y)
+                    elif event.type == pygame.MOUSEBUTTONDOWN:
+                        if event.button == 1: 
+                            self.on_mouse_press(*event.pos)
+                            
+                self.on_update(dt)
+                self.on_draw()
+                pygame.display.flip()
+                await asyncio.sleep(0)
+        except Exception as e:
+            import traceback
+            self.real_display.fill((150, 0, 0)) # Red background for error
+            font = pygame.font.SysFont(None, 24)
+            y = 20
+            for line in traceback.format_exc().split('\n'):
+                self.real_display.blit(font.render(line, True, (255, 255, 255)), (20, y))
+                y += 30
             pygame.display.flip()
+            while True:
+                await asyncio.sleep(1) # Keep browser alive so you can read the error
 
     def on_mouse_motion(self, x, y):
         self.hovered_joker = None
@@ -502,7 +525,47 @@ class WarGame:
             
             self.update_game_buttons()
 
-    def draw_game_contents(self):
+    def draw_game_world(self):
+        if self.state == GameState.SHOPPING:
+            ui_elements.draw_shadows(self.screen, self.shop_list)
+            self.shop_list.draw(self.screen)
+
+        elif self.state == GameState.PACK_OPENING:
+            ui_elements.draw_shadows(self.screen, self.pack_card_list)
+            self.pack_card_list.draw(self.screen)
+            for card in self.pack_card_list:
+                card.draw_modifier(self.screen)
+                if card.is_selected:
+                    pygame.draw.rect(self.screen, config.COLOR_GREEN, card.rect, 4, border_radius=8)
+
+        elif self.state == GameState.GAME_OVER:
+            pass 
+
+        else: 
+            ui_elements.draw_shadows(self.screen, self.card_list)
+            self.card_list.draw(self.screen)
+            for card in self.card_list: card.draw_modifier(self.screen)
+            
+            ui_elements.draw_shadows(self.screen, self.hand_list)
+            self.hand_list.draw(self.screen)
+            
+            for card in self.hand_list:
+                card.draw_modifier(self.screen)
+                if card.is_selected:
+                    pygame.draw.rect(self.screen, config.COLOR_RED, card.rect, 4, border_radius=8)
+
+        ui_elements.draw_shadows(self.screen, self.joker_list)
+        self.joker_list.draw(self.screen)
+        
+        for joker in self.joker_list:
+            if joker.is_selected:
+                pygame.draw.rect(self.screen, config.COLOR_BTN_SELL, joker.rect, 2)
+                
+        ui_elements.draw_shadows(self.screen, self.animating_cards)
+        self.animating_cards.draw(self.screen)
+        for card in self.animating_cards: card.draw_modifier(self.screen)
+
+    def draw_ui(self):
         pygame.draw.rect(self.screen, config.COLOR_UI_BG, (0, 0, config.SCREEN_WIDTH, 80))
         
         lvl_surf = ui_elements.FONT_16.render(f"Lvl: {self.round_level}", True, config.COLOR_WHITE)
@@ -525,20 +588,12 @@ class WarGame:
         if self.state == GameState.SHOPPING:
             msg_surf = ui_elements.FONT_20.render(self.message, True, config.COLOR_WHITE)
             self.screen.blit(msg_surf, (config.SCREEN_WIDTH//2 - msg_surf.get_width()//2, 150))
-            ui_elements.draw_shadows(self.screen, self.shop_list)
-            self.shop_list.draw(self.screen)
             for btn in self.shop_buttons: btn.draw(self.screen)
             if self.btn_next_round: self.btn_next_round.draw(self.screen)
 
         elif self.state == GameState.PACK_OPENING:
             msg_surf = ui_elements.FONT_20.render(self.message, True, config.COLOR_WHITE)
             self.screen.blit(msg_surf, (config.SCREEN_WIDTH//2 - msg_surf.get_width()//2, 120))
-            ui_elements.draw_shadows(self.screen, self.pack_card_list)
-            self.pack_card_list.draw(self.screen)
-            for card in self.pack_card_list:
-                card.draw_modifier(self.screen)
-                if card.is_selected:
-                    pygame.draw.rect(self.screen, config.COLOR_GREEN, card.rect, 4, border_radius=8)
             for btn in self.btn_pack_mods: btn.draw(self.screen)
             self.btn_pack_skip.draw(self.screen)
 
@@ -579,45 +634,34 @@ class WarGame:
                 nc_surf = ui_elements.FONT_12.render("NEW CARD", True, config.COLOR_WHITE)
                 self.screen.blit(nc_surf, (config.DRAWN_CARD_X - nc_surf.get_width()//2, config.DRAWN_CARD_Y - 120))
 
-            # --- FIXED: Draw Both Hand and Deck ---
-            ui_elements.draw_shadows(self.screen, self.card_list)
-            self.card_list.draw(self.screen)
-            for card in self.card_list: card.draw_modifier(self.screen)
-            
-            ui_elements.draw_shadows(self.screen, self.hand_list)
-            self.hand_list.draw(self.screen)
-            
-            for card in self.hand_list:
-                card.draw_modifier(self.screen)
-                if card.is_selected:
-                    pygame.draw.rect(self.screen, config.COLOR_RED, card.rect, 4, border_radius=8)
-
             if self.btn_action: self.btn_action.draw(self.screen)
             if self.btn_score: self.btn_score.draw(self.screen)
 
-        ui_elements.draw_shadows(self.screen, self.joker_list)
-        self.joker_list.draw(self.screen)
-        
-        for joker in self.joker_list:
-            if joker.is_selected:
-                pygame.draw.rect(self.screen, config.COLOR_BTN_SELL, joker.rect, 2)
-                
         if self.btn_sell.visible: self.btn_sell.draw(self.screen)
 
         ui_elements.draw_tooltip(self.screen, self.hovered_joker, self.mouse_x, self.mouse_y)
-        
-        ui_elements.draw_shadows(self.screen, self.animating_cards)
-        self.animating_cards.draw(self.screen)
-        for card in self.animating_cards: card.draw_modifier(self.screen)
 
     def on_draw(self):
-            self.screen.fill(config.COLOR_BG)
-            self.draw_game_contents()
-            
-            # NEW: Draw the CRT overlay over everything else at the very end
-            self.crt_overlay.draw(self.screen)
+        self.screen.fill(config.COLOR_BG)
+        
+        # 1. Draw the game objects and background
+        self.draw_game_world()
+        
+        # 2. Apply the CRT shader to the game world
+        self.crt_overlay.draw(self.screen)
+        
+        # 3. Draw UI elements (Text, Buttons) over everything so they stay crisp
+        self.draw_ui()
+        
+        # 4. Blit the fully rendered off-screen surface to the actual browser canvas
+        if self.screen is not self.real_display:
+            self.real_display.blit(self.screen, (0, 0))
 
-if __name__ == "__main__":
+async def main():
     game = WarGame()
     game.setup()
-    game.run()
+    await game.run()
+
+if __name__ == "__main__":
+    asyncio.run(main())
+    pygame.quit()

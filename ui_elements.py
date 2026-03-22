@@ -1,11 +1,20 @@
 import pygame
 import config
+import sys
 
-pygame.font.init()
-FONT_14 = pygame.font.SysFont(None, 24, bold=True)
-FONT_12 = pygame.font.SysFont(None, 20)
-FONT_16 = pygame.font.SysFont(None, 28)
-FONT_20 = pygame.font.SysFont(None, 34, bold=True)
+FONT_14 = None
+FONT_12 = None
+FONT_16 = None
+FONT_20 = None
+
+def init_fonts():
+    global FONT_14, FONT_12, FONT_16, FONT_20
+    if FONT_14 is None:
+        pygame.font.init()
+        FONT_14 = pygame.font.SysFont(None, 24, bold=True)
+        FONT_12 = pygame.font.SysFont(None, 20)
+        FONT_16 = pygame.font.SysFont(None, 28)
+        FONT_20 = pygame.font.SysFont(None, 34, bold=True)
 
 class TextButton:
     def __init__(self, cx, cy, width, height, text, color=config.COLOR_BTN_DEFAULT, text_color=config.COLOR_WHITE):
@@ -49,6 +58,8 @@ class TextButton:
     def is_clicked(self, x, y):
         return self.visible and self.active and self.is_hovered
 
+_shadow_cache = {}
+
 def draw_shadows(surface, sprite_list):
     """ Simplified Pygame drop shadow """
     for sprite in sprite_list:
@@ -56,9 +67,14 @@ def draw_shadows(surface, sprite_list):
         shadow_rect.x += 5
         shadow_rect.y += 5 # Shadow goes down in Pygame
         
-        # Create shadow surface
-        shadow_surf = pygame.Surface((shadow_rect.width, shadow_rect.height), pygame.SRCALPHA)
-        shadow_surf.fill(config.COLOR_SHADOW)
+        # Optimize memory by reusing shadow surfaces
+        size = (shadow_rect.width, shadow_rect.height)
+        if size not in _shadow_cache:
+            shadow_surf = pygame.Surface(size, pygame.SRCALPHA)
+            shadow_surf.fill(config.COLOR_SHADOW)
+            _shadow_cache[size] = shadow_surf
+            
+        shadow_surf = _shadow_cache[size]
         
         if hasattr(sprite, 'angle') and sprite.angle != 0:
             shadow_surf = pygame.transform.rotate(shadow_surf, sprite.angle)
@@ -94,33 +110,69 @@ class CRTOverlay:
         self.width = width
         self.height = height
         
-        # Create the scanline surface
-        self.overlay = pygame.Surface((width, height), pygame.SRCALPHA)
+        # 1. Create the scanline surface (slightly taller for scrolling)
+        self.scanline_spacing = 4
+        self.scanline_surf = pygame.Surface((width, height + self.scanline_spacing), pygame.SRCALPHA)
         
-        # Draw horizontal scanlines
-        for y in range(0, height + 20, 20):
-            pygame.draw.line(self.overlay, (0, 0, 0, 60), (0, y), (width, y), 10)
+        for y in range(0, height + self.scanline_spacing, self.scanline_spacing):
+            pygame.draw.line(self.scanline_surf, (0, 0, 0, 60), (0, y), (width, y), 2)
             
-        # Draw a subtle darkened vignette around the edges
-        vignette = pygame.Surface((width, height), pygame.SRCALPHA)
-        # Fill with black-ish shadow
-        # pygame.draw.rect(vignette, (0, 0, 0, 150), (0, 0, width, height))
-        # Cut a massive transparent hole in the center
-        # pygame.draw.ellipse(vignette, (0, 0, 0, 0), (-200, -100, width + 400, height + 200))
+        # 2. Draw a subtle darkened vignette around the edges
+        self.vignette = pygame.Surface((width, height), pygame.SRCALPHA)
+        self.vignette.fill((0, 0, 0, 0)) # Explicitly clear WebGL garbage memory
+        thickness = 240
+        for i in range(thickness):
+            alpha = int(150 * (1.0 - (i / thickness)))
+            pygame.draw.rect(self.vignette, (0, 0, 0, alpha), (i, i, width - i*2, height - i*2), 1)
         
-        self.overlay.blit(vignette, (0, 0))
-        
-        # For animating the scanlines moving downwards
         self.y_offset = 0.0
+        
+        # --- Pre-allocated Surfaces for Shaders (Performance Optimization) ---
+        if sys.platform not in ("emscripten", "wasi"):
+            self.pixel_scale = 2
+            sw, sh = width // self.pixel_scale, height // self.pixel_scale
+            self.small_surf = pygame.Surface((sw, sh)).convert()
+            self.small_red = pygame.Surface((sw, sh)).convert()
+            self.small_cyan = pygame.Surface((sw, sh)).convert()
+            self.small_combined = pygame.Surface((sw, sh)).convert()
 
     def update(self, delta_time):
-        """ Progresses the scanline animation """
-        self.y_offset += 10 * delta_time
-        if self.y_offset >= 20:
-            self.y_offset = 0
+        # Animate scanlines moving downwards
+        self.y_offset += 20 * delta_time
+        if self.y_offset >= self.scanline_spacing:
+            self.y_offset -= self.scanline_spacing
 
     def draw(self, screen):
         """ Draws the overlay onto the target screen """
-        screen.blit(self.overlay, (0, int(self.y_offset) - 40))
-        # Blit a second time slightly offset to seamlessly loop the moving lines
-        screen.blit(self.overlay, (0, int(self.y_offset) - 24))
+        # --- WebAssembly / Pygbag Fallback ---
+        if sys.platform in ("emscripten", "wasi"):
+            screen.blit(self.scanline_surf, (0, int(self.y_offset) - self.scanline_spacing))
+            screen.blit(self.vignette, (0, 0))
+            return
+            
+        try:
+            # --- 1. Scale down (Pixelation step 1) ---
+            pygame.transform.scale(screen, self.small_surf.get_size(), self.small_surf)
+            
+            # --- 2. Chromatic Aberration applied to SMALL surface ---
+            self.small_red.blit(self.small_surf, (0, 0))
+            self.small_red.fill((255, 0, 0), special_flags=pygame.BLEND_RGB_MULT)
+            
+            self.small_cyan.blit(self.small_surf, (0, 0))
+            self.small_cyan.fill((0, 255, 255), special_flags=pygame.BLEND_RGB_MULT)
+            
+            self.small_combined.fill((0, 0, 0))
+            shift_amount = 1 
+            self.small_combined.blit(self.small_red, (-shift_amount, 0))
+            self.small_combined.blit(self.small_cyan, (shift_amount, 0), special_flags=pygame.BLEND_RGB_ADD)
+            
+            # --- 3. Scale back up directly onto the screen (Pixelation step 2) ---
+            pygame.transform.scale(self.small_combined, screen.get_size(), screen)
+        except Exception:
+            pass # If shaders fail in browser, silently ignore them so the game loop survives
+        
+        # --- 4. Moving Scanlines ---
+        screen.blit(self.scanline_surf, (0, int(self.y_offset) - self.scanline_spacing))
+        
+        # --- 5. Vignette ---
+        screen.blit(self.vignette, (0, 0))
