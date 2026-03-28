@@ -170,7 +170,7 @@ class WarGame:
 
         self.shop_manager.generate_shop(self.shop_list, self.shop_buttons, self.joker_list)
         
-        self.btn_next_round = ui_elements.TextButton(config.SCREEN_WIDTH - 150, 80, 200, 60, "NEXT LEVEL >", config.COLOR_GREEN)
+        self.btn_next_round = ui_elements.TextButton(config.SCREEN_WIDTH - 150, config.SCREEN_HEIGHT - 150, 200, 60, "NEXT LEVEL >", config.COLOR_GREEN)
         self.update_shop_buttons()
 
     def update_shop_buttons(self):
@@ -240,7 +240,7 @@ class WarGame:
             btn = ui_elements.TextButton(bx + (i * 200), by, 180, 60, data['name'], data['color'])
             self.btn_pack_mods.append(btn)
             
-        self.btn_pack_skip = ui_elements.TextButton(config.SCREEN_WIDTH - 100, 50, 100, 40, "SKIP", config.COLOR_BTN_DEFAULT)
+        self.btn_pack_skip = ui_elements.TextButton(config.SCREEN_WIDTH - 150, config.SCREEN_HEIGHT - 150, 200, 60, "SKIP", config.COLOR_BTN_DEFAULT)
 
     def apply_pack_modifier(self, mod_index):
         selected = [c for c in self.pack_card_list if c.is_selected]
