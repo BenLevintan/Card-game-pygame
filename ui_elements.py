@@ -64,8 +64,16 @@ def draw_shadows(surface, sprite_list):
     """ Simplified Pygame drop shadow """
     for sprite in sprite_list:
         shadow_rect = sprite.rect.copy()
-        shadow_rect.x += 5
-        shadow_rect.y += 5 # Shadow goes down in Pygame
+        
+        offset_x = 5
+        offset_y = 5
+        
+        if getattr(sprite, 'is_selected', False):
+            offset_x += 5
+            offset_y += 15
+            
+        shadow_rect.x += offset_x
+        shadow_rect.y += offset_y # Shadow goes down in Pygame
         
         # Optimize memory by reusing shadow surfaces
         size = (shadow_rect.width, shadow_rect.height)

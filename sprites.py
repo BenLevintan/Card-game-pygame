@@ -39,15 +39,24 @@ class Joker(pygame.sprite.Sprite):
 
     def update(self, delta_time):
         self.timer += delta_time
+        
+        actual_target_y = self.target_y
+        if self.is_selected:
+            actual_target_y -= 30
+            
         dx = self.target_x - self._phys_x
-        dy = self.target_y - self._phys_y
+        dy = actual_target_y - self._phys_y
         self.vel_x = (self.vel_x + dx * config.STIFFNESS) * config.DAMPING
         self.vel_y = (self.vel_y + dy * config.STIFFNESS) * config.DAMPING
         self._phys_x += self.vel_x
         self._phys_y += self.vel_y
         
-        float_offset = math.sin(self.timer * config.FLOAT_SPEED + self.float_phase) * config.FLOAT_RANGE
-        self.angle = math.sin(self.timer * config.JOKER_ROT_SPEED + self.rot_phase) * config.JOKER_ROT_RANGE
+        if self.is_selected:
+            float_offset = 0
+            self.angle = 0
+        else:
+            float_offset = math.sin(self.timer * config.FLOAT_SPEED + self.float_phase) * config.FLOAT_RANGE
+            self.angle = math.sin(self.timer * config.JOKER_ROT_SPEED + self.rot_phase) * config.JOKER_ROT_RANGE
         
         self.image = pygame.transform.rotate(self.orig_image, self.angle)
         self.rect = self.image.get_rect(center=(self._phys_x, self._phys_y + float_offset))
@@ -83,10 +92,7 @@ class Card(pygame.sprite.Sprite):
         self.modifier = None 
         
         width, height = int(config.CARD_WIDTH), int(config.CARD_HEIGHT)
-        
-        # =========================================================
-        # PRETTIER PYGAME PROCEDURAL CARDS
-        # =========================================================
+
         self.orig_image = pygame.Surface((width, height), pygame.SRCALPHA)
         pygame.draw.rect(self.orig_image, (255, 255, 255), (0, 0, width, height), border_radius=10)
         pygame.draw.rect(self.orig_image, (50, 50, 50), (0, 0, width, height), 2, border_radius=10)
@@ -176,8 +182,12 @@ class Card(pygame.sprite.Sprite):
                 self.alpha = 255
             return 
 
+        actual_target_y = self.target_y
+        if self.is_selected:
+            actual_target_y -= 30
+
         dx = self.target_x - self._phys_x
-        dy = self.target_y - self._phys_y
+        dy = actual_target_y - self._phys_y
         self.vel_x = (self.vel_x + dx * config.STIFFNESS) * config.DAMPING
         self.vel_y = (self.vel_y + dy * config.STIFFNESS) * config.DAMPING
         self._phys_x += self.vel_x
@@ -188,8 +198,11 @@ class Card(pygame.sprite.Sprite):
             if (self.rect.centery > config.SCREEN_HEIGHT + 200 or self.rect.centery < -200):
                 self.kill()
         else:
-            float_offset = math.sin(self.timer * config.FLOAT_SPEED + self.float_phase) * config.FLOAT_RANGE
-            self.rect.center = (self._phys_x, self._phys_y + float_offset)
+            if self.is_selected:
+                self.rect.center = (self._phys_x, self._phys_y)
+            else:
+                float_offset = math.sin(self.timer * config.FLOAT_SPEED + self.float_phase) * config.FLOAT_RANGE
+                self.rect.center = (self._phys_x, self._phys_y + float_offset)
 
     def draw_modifier(self, screen):
         if self.modifier:
