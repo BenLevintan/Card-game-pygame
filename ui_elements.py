@@ -119,11 +119,11 @@ class CRTOverlay:
         self.height = height
         
         # 1. Create the scanline surface (slightly taller for scrolling)
-        self.scanline_spacing = 4
+        self.scanline_spacing = 8
         self.scanline_surf = pygame.Surface((width, height + self.scanline_spacing), pygame.SRCALPHA)
         
         for y in range(0, height + self.scanline_spacing, self.scanline_spacing):
-            pygame.draw.line(self.scanline_surf, (0, 0, 0, 60), (0, y), (width, y), 2)
+            pygame.draw.line(self.scanline_surf, (0, 0, 0, 60), (0, y), (width, y), 4)
             
         # 2. Draw a subtle darkened vignette around the edges
         self.vignette = pygame.Surface((width, height), pygame.SRCALPHA)
@@ -137,7 +137,7 @@ class CRTOverlay:
         
         # --- Pre-allocated Surfaces for Shaders (Performance Optimization) ---
         if sys.platform not in ("emscripten", "wasi"):
-            self.pixel_scale = 2
+            self.pixel_scale = 1.5
             sw, sh = width // self.pixel_scale, height // self.pixel_scale
             self.small_surf = pygame.Surface((sw, sh)).convert()
             self.small_red = pygame.Surface((sw, sh)).convert()
@@ -146,7 +146,7 @@ class CRTOverlay:
 
     def update(self, delta_time):
         # Animate scanlines moving downwards
-        self.y_offset += 20 * delta_time
+        self.y_offset += 8 * delta_time
         if self.y_offset >= self.scanline_spacing:
             self.y_offset -= self.scanline_spacing
 
