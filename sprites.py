@@ -95,32 +95,23 @@ class Card(pygame.sprite.Sprite):
         pygame.font.init()
         # Pygbag Fix: Requesting non-existent system fonts silently crashes WASM font rendering. Use default (None).
         font_small = pygame.font.SysFont(None, 28, bold=True)
-        font_large = pygame.font.SysFont(None, 65)
         
         text_color = (220, 30, 30) if self.color_type == 'Red' else (30, 30, 30)
         
-        # Unicode Card Suits
-        suit_symbols = {'Hearts': '♥', 'Diamonds': '♦', 'Clubs': '♣', 'Spades': '♠'}
-        symbol = suit_symbols.get(suit, suit[0])
-        
         # Render Text
         rank_surf = font_small.render(rank, True, text_color)
-        sym_surf_small = font_small.render(symbol, True, text_color)
-        sym_surf_large = font_large.render(symbol, True, text_color)
         
         # Draw Top-Left Corner
         self.orig_image.blit(rank_surf, (10, 8))
-        self.orig_image.blit(sym_surf_small, (10, 32))
+        self.draw_suit_symbol(self.orig_image, suit, 12, 34, 16, 16, text_color)
         
         # Draw Center Symbol
-        cx = width // 2 - sym_surf_large.get_width() // 2
-        cy = height // 2 - sym_surf_large.get_height() // 2
-        self.orig_image.blit(sym_surf_large, (cx, cy))
+        self.draw_suit_symbol(self.orig_image, suit, width // 2 - 20, height // 2 - 20, 40, 40, text_color)
         
         # Draw Bottom-Right Corner (Flipped)
         br_surf = pygame.Surface((40, 60), pygame.SRCALPHA)
         br_surf.blit(rank_surf, (0, 0))
-        br_surf.blit(sym_surf_small, (0, 24))
+        self.draw_suit_symbol(br_surf, suit, 2, 26, 16, 16, text_color)
         br_surf = pygame.transform.rotate(br_surf, 180)
         self.orig_image.blit(br_surf, (width - br_surf.get_width() - 5, height - br_surf.get_height() - 5))
         # =========================================================
@@ -139,6 +130,33 @@ class Card(pygame.sprite.Sprite):
         self.float_phase = random.uniform(0, 6.28)
         self.timer = 0.0
         self.alpha = 255
+
+    def draw_suit_symbol(self, surface, suit, x, y, w, h, color):
+        if suit == 'Diamonds':
+            points = [(x + w//2, y), (x + w, y + h//2), 
+                      (x + w//2, y + h), (x, y + h//2)]
+            pygame.draw.polygon(surface, color, points)
+        elif suit == 'Hearts':
+            r = w // 4
+            pygame.draw.circle(surface, color, (x + r, y + r), r)
+            pygame.draw.circle(surface, color, (x + w - r, y + r), r)
+            points = [(x, y + r), (x + w, y + r), (x + w//2, y + h)]
+            pygame.draw.polygon(surface, color, points)
+        elif suit == 'Spades':
+            r = w // 4
+            pygame.draw.circle(surface, color, (x + r, y + int(h*0.6)), r)
+            pygame.draw.circle(surface, color, (x + w - r, y + int(h*0.6)), r)
+            points = [(x, y + int(h*0.6)), (x + w, y + int(h*0.6)), (x + w//2, y)]
+            pygame.draw.polygon(surface, color, points)
+            stem = [(x + w//2, y + int(h*0.5)), (x + w//2 - int(r*0.8), y + h), (x + w//2 + int(r*0.8), y + h)]
+            pygame.draw.polygon(surface, color, stem)
+        elif suit == 'Clubs':
+            r = int(w * 0.24)
+            pygame.draw.circle(surface, color, (x + w//2, y + r + 2), r)
+            pygame.draw.circle(surface, color, (x + r + 1, y + int(h*0.6)), r)
+            pygame.draw.circle(surface, color, (x + w - r - 1, y + int(h*0.6)), r)
+            stem = [(x + w//2, y + int(h*0.5)), (x + w//2 - int(r*0.8), y + h), (x + w//2 + int(r*0.8), y + h)]
+            pygame.draw.polygon(surface, color, stem)
 
     def update(self, delta_time):
         self.timer += delta_time
