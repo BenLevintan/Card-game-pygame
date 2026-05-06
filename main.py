@@ -2,7 +2,6 @@ import pygame
 import sys
 import enum
 import warnings
-import asyncio
 
 warnings.filterwarnings("ignore") 
 
@@ -137,7 +136,12 @@ class WarGame:
             self.drawn_card = card
             self.state = GameState.DECIDING
         else:
-            self.message = "DECK EMPTY!"
+            if self.score_total < self.target_score:
+                self.state = GameState.GAME_OVER
+                self.audio_manager.enter_game_over()
+                self.message = "lose: no cards in the deck"
+            else:
+                self.message = "DECK EMPTY!"
 
     def enter_shop(self):
         self.state = GameState.SHOPPING
@@ -394,7 +398,7 @@ class WarGame:
         if self.state == GameState.SHOPPING:
             self.update_shop_buttons()
 
-    async def run(self):
+    def run(self):
         try:
             while True:
                 dt = self.clock.tick(60) / 1000.0
@@ -412,7 +416,6 @@ class WarGame:
                 self.on_update(dt)
                 self.on_draw()
                 pygame.display.flip()
-                await asyncio.sleep(0)
         except Exception as e:
             import traceback
             self.real_display.fill((150, 0, 0)) # Red background for error
@@ -423,7 +426,7 @@ class WarGame:
                 y += 30
             pygame.display.flip()
             while True:
-                await asyncio.sleep(1) # Keep browser alive so you can read the error
+                pygame.time.wait(1000) 
 
     def on_mouse_motion(self, x, y):
         self.hovered_joker = None
@@ -603,7 +606,11 @@ class WarGame:
             self.screen.blit(overlay, (0,0))
             
             go_surf = ui_elements.FONT_20.render("GAME OVER", True, config.COLOR_RED)
-            fs_surf = ui_elements.FONT_20.render(f"Final Score: {self.score_total}", True, config.COLOR_WHITE)
+            
+            if self.message == "lose: no cards in the deck":
+                fs_surf = ui_elements.FONT_20.render(self.message, True, config.COLOR_WHITE)
+            else:
+                fs_surf = ui_elements.FONT_20.render(f"Final Score: {self.score_total}", True, config.COLOR_WHITE)
             rs_surf = ui_elements.FONT_16.render("Click to Restart", True, (150, 150, 150))
             
             self.screen.blit(go_surf, (config.SCREEN_WIDTH//2 - go_surf.get_width()//2, config.SCREEN_HEIGHT//2 - 50))
@@ -657,11 +664,11 @@ class WarGame:
         if self.screen is not self.real_display:
             self.real_display.blit(self.screen, (0, 0))
 
-async def main():
+def main():
     game = WarGame()
     game.setup()
-    await game.run()
+    game.run()
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
     pygame.quit()
