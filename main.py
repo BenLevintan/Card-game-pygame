@@ -83,7 +83,7 @@ class WarGame:
         self.score_total = 0
         self.round_level = 1
         self.target_score = config.BASE_TARGET_SCORE
-        self.coins = 99995  
+        self.coins = 999999999995  
         self.run_discards = 0
         
         self.joker_list.empty()
@@ -136,7 +136,9 @@ class WarGame:
             self.drawn_card = card
             self.state = GameState.DECIDING
         else:
-            if self.score_total < self.target_score:
+            self.drawn_card = None
+            self.state = GameState.DECIDING
+            if len(self.hand_list) == 0 and self.score_total < self.target_score:
                 self.state = GameState.GAME_OVER
                 self.audio_manager.enter_game_over()
                 self.message = "lose: no cards in the deck"
@@ -302,6 +304,11 @@ class WarGame:
         else:
             self.message = f"Scored {final_score}! ({base} x {multi})"
             if coin_bonus > 0: self.message += f" Earned ${coin_bonus}!"
+            
+            if self.drawn_card is None and len(self.deck_manager.draw_pile) == 0 and len(self.hand_list) == 0:
+                self.state = GameState.GAME_OVER
+                self.audio_manager.enter_game_over()
+                self.message = "lose: no cards in the deck"
 
     def process_swap(self):
         to_remove = [c for c in self.hand_list if c.is_selected]
@@ -332,6 +339,13 @@ class WarGame:
             self.drawn_card = None
             self.reposition_hand()
             self.draw_new_card()
+        else:
+            self.reposition_hand()
+            if len(self.hand_list) == 0 and len(self.deck_manager.draw_pile) == 0:
+                if self.score_total < self.target_score:
+                    self.state = GameState.GAME_OVER
+                    self.audio_manager.enter_game_over()
+                    self.message = "lose: no cards in the deck"
 
     def update_game_buttons(self):
         if self.state == GameState.GAME_OVER:
