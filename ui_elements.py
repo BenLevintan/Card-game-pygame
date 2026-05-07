@@ -137,8 +137,8 @@ class CRTOverlay:
         
         # --- Pre-allocated Surfaces for Shaders (Performance Optimization) ---
         if sys.platform not in ("emscripten", "wasi"):
-            self.pixel_scale = 1.5
-            sw, sh = width // self.pixel_scale, height // self.pixel_scale
+            self.pixel_scale = 1.15
+            sw, sh = int(width / self.pixel_scale), int(height / self.pixel_scale)
             self.small_surf = pygame.Surface((sw, sh)).convert()
             self.small_red = pygame.Surface((sw, sh)).convert()
             self.small_cyan = pygame.Surface((sw, sh)).convert()
@@ -171,7 +171,7 @@ class CRTOverlay:
             
             self.small_combined.fill((0, 0, 0))
             shift_amount = 1 
-            self.small_combined.blit(self.small_red, (-shift_amount, 0))
+            self.small_combined.blit(self.small_red, (0, 0))
             self.small_combined.blit(self.small_cyan, (shift_amount, 0), special_flags=pygame.BLEND_RGB_ADD)
             
             # --- 3. Scale back up directly onto the screen (Pixelation step 2) ---

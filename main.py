@@ -83,7 +83,7 @@ class WarGame:
         self.score_total = 0
         self.round_level = 1
         self.target_score = config.BASE_TARGET_SCORE
-        self.coins = 999999999995  
+        self.coins = 15  
         self.run_discards = 0
         
         self.joker_list.empty()
