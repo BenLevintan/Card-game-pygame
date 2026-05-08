@@ -76,6 +76,7 @@ class WarGame:
         self.mouse_x = 0
         self.mouse_y = 0
         self.shop_focus_index = -1
+        self.pack_focus_index = -1
 
         # Initialize the CRT overlay
         self.crt_overlay = ui_elements.CRTOverlay(config.SCREEN_WIDTH, config.SCREEN_HEIGHT)
@@ -221,6 +222,7 @@ class WarGame:
         self.message = "Select Cards then Choose Modifier"
         self.pack_card_list.empty()
         self.btn_pack_mods = []
+        self.pack_focus_index = 0
         
         self.audio_manager.play_mod_fx() 
         
@@ -461,8 +463,7 @@ class WarGame:
         if self.state == GameState.SHOPPING:
             pass # This is now handled in on_update to combine mouse and keyboard focus
         elif self.state == GameState.PACK_OPENING:
-            for btn in self.btn_pack_mods: btn.check_mouse_hover(x, y)
-            self.btn_pack_skip.check_mouse_hover(x, y)
+            pass # Handled in on_update
         else:
             if self.btn_action: self.btn_action.check_mouse_hover(x, y)
             if self.btn_score: self.btn_score.check_mouse_hover(x, y)
@@ -567,6 +568,43 @@ class WarGame:
                             self.round_level += 1
                             self.target_score = int(self.target_score * 1.5)
                             self.start_new_round()
+                            
+        elif self.state == GameState.PACK_OPENING:
+            navigable_items = list(self.pack_card_list) + self.btn_pack_mods + ([self.btn_pack_skip] if self.btn_pack_skip else [])
+            if not navigable_items: return
+
+            if key == pygame.K_RIGHT:
+                self.pack_focus_index = (self.pack_focus_index + 1) % len(navigable_items)
+            elif key == pygame.K_LEFT:
+                self.pack_focus_index = (self.pack_focus_index - 1) % len(navigable_items)
+            elif key == pygame.K_DOWN:
+                num_cards = len(self.pack_card_list)
+                if self.pack_focus_index < 4 and num_cards > 4:
+                    self.pack_focus_index = min(self.pack_focus_index + 4, num_cards - 1)
+                elif self.pack_focus_index < num_cards:
+                    self.pack_focus_index = num_cards
+            elif key == pygame.K_UP:
+                num_cards = len(self.pack_card_list)
+                if self.pack_focus_index >= num_cards:
+                    self.pack_focus_index = num_cards - 1
+                elif self.pack_focus_index >= 4:
+                    self.pack_focus_index -= 4
+            elif key in (pygame.K_SPACE, pygame.K_RETURN, pygame.K_KP_ENTER):
+                if self.pack_focus_index != -1 and self.pack_focus_index < len(navigable_items):
+                    focused_item = navigable_items[self.pack_focus_index]
+                    
+                    if focused_item in self.pack_card_list:
+                        if focused_item.is_selected: focused_item.is_selected = False
+                        else:
+                            num_selected = len([c for c in self.pack_card_list if c.is_selected])
+                            if num_selected < 2: focused_item.is_selected = True
+                            else: self.message = "Select only 2 cards!"
+                    elif focused_item in self.btn_pack_mods:
+                        mod_index = self.btn_pack_mods.index(focused_item)
+                        self.apply_pack_modifier(mod_index)
+                    elif focused_item == self.btn_pack_skip:
+                        self.state = GameState.SHOPPING
+                        self.pack_card_list.empty()
 
     def on_update(self, delta_time):
             self.audio_manager.update(delta_time)
@@ -602,6 +640,24 @@ class WarGame:
                     elif self.shop_focus_index != -1 and self.shop_focus_index < len(navigable_buttons):
                         navigable_buttons[self.shop_focus_index].is_hovered = True
 
+            elif self.state == GameState.PACK_OPENING:
+                navigable_items = list(self.pack_card_list) + self.btn_pack_mods + ([self.btn_pack_skip] if self.btn_pack_skip else [])
+                if navigable_items:
+                    mouse_hover_index = -1
+                    for i, item in enumerate(navigable_items):
+                        if item.rect.collidepoint(self.mouse_x, self.mouse_y):
+                            mouse_hover_index = i
+                            break
+                    
+                    for item in navigable_items:
+                        item.is_hovered = False
+
+                    if mouse_hover_index != -1:
+                        navigable_items[mouse_hover_index].is_hovered = True
+                        self.pack_focus_index = mouse_hover_index
+                    elif self.pack_focus_index != -1 and self.pack_focus_index < len(navigable_items):
+                        navigable_items[self.pack_focus_index].is_hovered = True
+
 
 
     def draw_game_world(self):
@@ -614,6 +670,8 @@ class WarGame:
             self.pack_card_list.draw(self.screen)
             for card in self.pack_card_list:
                 card.draw_modifier(self.screen)
+                if getattr(card, 'is_hovered', False):
+                    pygame.draw.rect(self.screen, config.COLOR_GOLD, card.rect.inflate(8, 8), 2, border_radius=10)
                 if card.is_selected:
                     pygame.draw.rect(self.screen, config.COLOR_GREEN, card.rect, 4, border_radius=8)
 
