@@ -75,6 +75,7 @@ class WarGame:
         self.hovered_joker = None 
         self.mouse_x = 0
         self.mouse_y = 0
+        self.shop_focus_index = -1
 
         # Initialize the CRT overlay
         self.crt_overlay = ui_elements.CRTOverlay(config.SCREEN_WIDTH, config.SCREEN_HEIGHT)
@@ -176,6 +177,8 @@ class WarGame:
 
         self.shop_manager.generate_shop(self.shop_list, self.shop_buttons, self.joker_list)
         
+        self.shop_focus_index = 0 if self.shop_buttons else -1
+
         self.btn_next_round = ui_elements.TextButton(config.SCREEN_WIDTH - 150, config.SCREEN_HEIGHT - 150, 200, 60, "NEXT LEVEL >", config.COLOR_GREEN)
         self.update_shop_buttons()
 
@@ -456,8 +459,7 @@ class WarGame:
                     break
 
         if self.state == GameState.SHOPPING:
-            for btn in self.shop_buttons: btn.check_mouse_hover(x, y)
-            if self.btn_next_round: self.btn_next_round.check_mouse_hover(x, y)
+            pass # This is now handled in on_update to combine mouse and keyboard focus
         elif self.state == GameState.PACK_OPENING:
             for btn in self.btn_pack_mods: btn.check_mouse_hover(x, y)
             self.btn_pack_skip.check_mouse_hover(x, y)
@@ -543,6 +545,28 @@ class WarGame:
                     if index < len(sorted_hand):
                         card = sorted_hand[index]
                         card.is_selected = not card.is_selected
+        
+        elif self.state == GameState.SHOPPING:
+            navigable_buttons = self.shop_buttons + ([self.btn_next_round] if self.btn_next_round else [])
+            if not navigable_buttons: return
+
+            if key == pygame.K_RIGHT:
+                self.shop_focus_index = (self.shop_focus_index + 1) % len(navigable_buttons)
+            elif key == pygame.K_LEFT:
+                self.shop_focus_index = (self.shop_focus_index - 1) % len(navigable_buttons)
+            elif key in (pygame.K_SPACE, pygame.K_RETURN, pygame.K_KP_ENTER):
+                if self.shop_focus_index != -1 and self.shop_focus_index < len(navigable_buttons):
+                    focused_button = navigable_buttons[self.shop_focus_index]
+
+                    if focused_button.active:
+                        if focused_button in self.shop_buttons:
+                            item_index = self.shop_buttons.index(focused_button)
+                            self.buy_shop_item(item_index)
+                        
+                        elif focused_button == self.btn_next_round:
+                            self.round_level += 1
+                            self.target_score = int(self.target_score * 1.5)
+                            self.start_new_round()
 
     def on_update(self, delta_time):
             self.audio_manager.update(delta_time)
@@ -559,6 +583,26 @@ class WarGame:
                 self.pack_card_list.update(delta_time)
             
             self.update_game_buttons()
+
+            if self.state == GameState.SHOPPING:
+                navigable_buttons = self.shop_buttons + ([self.btn_next_round] if self.btn_next_round else [])
+                if navigable_buttons:
+                    mouse_hover_index = -1
+                    for i, btn in enumerate(navigable_buttons):
+                        if btn.rect.collidepoint(self.mouse_x, self.mouse_y):
+                            mouse_hover_index = i
+                            break
+                    
+                    for btn in navigable_buttons:
+                        btn.is_hovered = False
+
+                    if mouse_hover_index != -1:
+                        navigable_buttons[mouse_hover_index].is_hovered = True
+                        self.shop_focus_index = mouse_hover_index
+                    elif self.shop_focus_index != -1 and self.shop_focus_index < len(navigable_buttons):
+                        navigable_buttons[self.shop_focus_index].is_hovered = True
+
+
 
     def draw_game_world(self):
         if self.state == GameState.SHOPPING:
