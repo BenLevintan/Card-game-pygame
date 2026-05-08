@@ -559,6 +559,14 @@ class WarGame:
             pass 
 
         else: 
+            # Draw the unified playmat background behind the cards
+            playmat_color = (45, 105, 75) # Darker green than COLOR_BG
+            start_x = (config.SCREEN_WIDTH - (config.MAX_HAND_SIZE * (config.CARD_WIDTH + 20))) / 2 + config.CARD_WIDTH / 2
+            total_slots_width = (config.MAX_HAND_SIZE - 1) * (config.CARD_WIDTH + 20) + config.CARD_WIDTH
+            pm_x = start_x - config.CARD_WIDTH / 2 - 20
+            pm_y = config.HAND_Y - config.CARD_HEIGHT / 2 - 20
+            pygame.draw.rect(self.screen, playmat_color, (pm_x, pm_y, total_slots_width + 40, config.CARD_HEIGHT + 40), border_radius=12)
+
             ui_elements.draw_shadows(self.screen, self.card_list)
             self.card_list.draw(self.screen)
             for card in self.card_list: card.draw_modifier(self.screen)
@@ -645,11 +653,6 @@ class WarGame:
                 line_surf = ui_elements.FONT_16.render(line, True, config.COLOR_GOLD)
                 self.screen.blit(line_surf, (config.SCREEN_WIDTH - 200, start_y + (i * 25)))
 
-            start_x = (config.SCREEN_WIDTH - (config.MAX_HAND_SIZE * (config.CARD_WIDTH + 20))) / 2 + config.CARD_WIDTH / 2
-            for i in range(config.MAX_HAND_SIZE):
-                slot_x = start_x + i * (config.CARD_WIDTH + 20)
-                pygame.draw.rect(self.screen, config.COLOR_GREEN, (slot_x - config.CARD_WIDTH/2, config.HAND_Y - config.CARD_HEIGHT/2, config.CARD_WIDTH, config.CARD_HEIGHT), 2, border_radius=8)
-            
             if self.state != GameState.GAME_OVER:
                 pygame.draw.rect(self.screen, config.COLOR_WHITE, (config.DRAWN_CARD_X - config.CARD_WIDTH/2 - 5, config.DRAWN_CARD_Y - config.CARD_HEIGHT/2 - 5, config.CARD_WIDTH + 10, config.CARD_HEIGHT + 10), 2, border_radius=8)
                 nc_surf = ui_elements.FONT_12.render("NEW CARD", True, config.COLOR_WHITE)
