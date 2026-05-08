@@ -426,6 +426,8 @@ class WarGame:
                     elif event.type == pygame.MOUSEBUTTONDOWN:
                         if event.button == 1: 
                             self.on_mouse_press(*event.pos)
+                    elif event.type == pygame.KEYDOWN:
+                        self.on_key_press(event.key)
                             
                 self.on_update(dt)
                 self.on_draw()
@@ -525,6 +527,22 @@ class WarGame:
             if self.state == GameState.DECIDING and self.discards_left > 0:
                 cards_clicked = [c for c in self.hand_list if c.rect.collidepoint(x, y)]
                 if cards_clicked: cards_clicked[-1].is_selected = not cards_clicked[-1].is_selected
+
+    def on_key_press(self, key):
+        if self.state in [GameState.DECIDING, GameState.DRAWING]:
+            if key == pygame.K_SPACE:
+                if self.btn_action and self.btn_action.active and self.btn_action.visible:
+                    self.process_swap()
+            elif key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+                if self.btn_score and self.btn_score.active and self.btn_score.visible:
+                    self.score_hand()
+            elif key in (pygame.K_1, pygame.K_2, pygame.K_3, pygame.K_4, pygame.K_5):
+                if self.state == GameState.DECIDING and self.discards_left > 0:
+                    index = key - pygame.K_1
+                    sorted_hand = sorted(list(self.hand_list), key=lambda c: (c.value, c.suit))
+                    if index < len(sorted_hand):
+                        card = sorted_hand[index]
+                        card.is_selected = not card.is_selected
 
     def on_update(self, delta_time):
             self.audio_manager.update(delta_time)
