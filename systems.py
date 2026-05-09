@@ -1,3 +1,5 @@
+import os
+import json
 import random
 import pygame
 import config
@@ -179,3 +181,62 @@ class ShopManager:
     def get_pack_modifiers(self):
         keys = list(config.MODIFIER_DATA.keys())
         return random.sample(keys, 2)
+
+class SaveManager:
+    def __init__(self):
+        self.save_file = "warlatro_save.json"
+        self.data = self.load()
+        
+    def load(self):
+        if os.path.exists(self.save_file):
+            try:
+                with open(self.save_file, "r") as f:
+                    return json.load(f)
+            except:
+                pass
+        return self.default_save()
+        
+    def default_save(self):
+        return {
+            "stats": {
+                "highest_level": 1,
+                "highest_score": 0,
+                "highest_hand_score": 0,
+                "hands_played": {}
+            },
+            "current_game": None
+        }
+        
+    def save(self):
+        try:
+            with open(self.save_file, "w") as f:
+                json.dump(self.data, f)
+        except:
+            pass
+            
+    def update_hand_played(self, hand_type):
+        self.data["stats"]["hands_played"][hand_type] = self.data["stats"]["hands_played"].get(hand_type, 0) + 1
+        self.save()
+        
+    def update_highest_hand(self, score):
+        if score > self.data["stats"]["highest_hand_score"]:
+            self.data["stats"]["highest_hand_score"] = score
+            self.save()
+            
+    def update_highest_score(self, score):
+        if score > self.data["stats"]["highest_score"]:
+            self.data["stats"]["highest_score"] = score
+            self.save()
+            
+    def update_highest_level(self, level):
+        if level > self.data["stats"]["highest_level"]:
+            self.data["stats"]["highest_level"] = level
+            self.save()
+            
+    def clear_current_game(self):
+        self.data["current_game"] = None
+        self.save()
+        
+    def save_current_game(self, game_state_dict):
+        self.data["current_game"] = game_state_dict
+        self.save()

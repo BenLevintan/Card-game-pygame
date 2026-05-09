@@ -12,11 +12,13 @@ import systems
 import scoring
 
 class GameState(enum.Enum):
+    MAIN_MENU = 0
     DRAWING = 1
     DECIDING = 2
     SHOPPING = 3
     PACK_OPENING = 4 
     GAME_OVER = 5
+    STATS = 6
 
 class WarGame:
     def __init__(self):
@@ -38,6 +40,7 @@ class WarGame:
         self.deck_manager = None
         self.shop_manager = systems.ShopManager()
         self.audio_manager = systems.AudioManager() 
+        self.save_manager = systems.SaveManager()
 
         # Pygame Groups
         self.card_list = pygame.sprite.Group()
@@ -48,7 +51,8 @@ class WarGame:
         self.animating_cards = pygame.sprite.Group() 
         self.drawn_card = None
         
-        self.state = GameState.DRAWING
+        self.state = GameState.MAIN_MENU
+        self.previous_state = None
         self.score_total = 0
         self.hands_played = 0
         self.hands_max = config.BASE_HANDS_TO_PLAY
@@ -83,7 +87,171 @@ class WarGame:
         
         self.volume_control = ui_elements.VolumeControl(config.SCREEN_WIDTH - 150, 40, width=100)
 
+    def sync_save(self):
+        if self.state not in [GameState.MAIN_MENU, GameState.STATS, GameState.GAME_OVER]:
+            self.save_current_state()
+
+    def _create_card(self, c_data):
+        c = sprites.Card(c_data["suit"], c_data["rank"], config.CARD_SCALE)
+        c.modifier = c_data["modifier"]
+        return c
+
+    def save_current_state(self):
+        state_data = {
+            "state": self.state.value,
+            "score_total": self.score_total,
+            "round_level": self.round_level,
+            "target_score": self.target_score,
+            "coins": self.coins,
+            "run_discards": self.run_discards,
+            "hands_played": self.hands_played,
+            "hands_max": self.hands_max,
+            "discards_left": self.discards_left,
+            "jokers": [j.key for j in self.joker_list],
+            "deck": [],
+            "shop_items": [],
+            "pack_indices": [],
+            "pack_modifiers": []
+        }
+        
+        master_deck_data = []
+        for c in self.deck_manager.master_deck:
+            loc = "master_only"
+            if c in self.deck_manager.draw_pile: loc = "draw"
+            elif c in self.deck_manager.discard_pile: loc = "discard"
+            elif c in self.hand_list: loc = "hand"
+            elif self.drawn_card and c == self.drawn_card: loc = "drawn"
+            
+            master_deck_data.append({
+                "suit": c.suit, "rank": c.rank, "modifier": c.modifier, "location": loc
+            })
+        state_data["deck"] = master_deck_data
+
+        if self.state == GameState.SHOPPING:
+            for item in self.shop_list:
+                if isinstance(item, sprites.Joker):
+                    state_data["shop_items"].append({"type": "Joker", "key": item.key, "cost": item.cost})
+                elif isinstance(item, sprites.Pack):
+                    state_data["shop_items"].append({"type": "Pack", "cost": item.cost})
+        elif self.state == GameState.PACK_OPENING:
+            state_data["pack_indices"] = [self.deck_manager.master_deck.index(c) for c in self.pack_card_list if c in self.deck_manager.master_deck]
+            state_data["pack_modifiers"] = self.pack_modifiers_offered
+
+        self.save_manager.save_current_game(state_data)
+
+    def load_current_state(self):
+        data = self.save_manager.data.get("current_game")
+        if not data: return False
+        
+        self.state = GameState(data["state"])
+        self.score_total = data["score_total"]
+        self.round_level = data["round_level"]
+        self.target_score = data["target_score"]
+        self.coins = data["coins"]
+        self.run_discards = data["run_discards"]
+        self.hands_played = data["hands_played"]
+        self.hands_max = data["hands_max"]
+        self.discards_left = data["discards_left"]
+        
+        self.joker_list.empty()
+        for key in data["jokers"]:
+            j = sprites.Joker(key, config.JOKER_SCALE)
+            self.joker_list.add(j)
+        self.reposition_jokers()
+
+        self.deck_manager = systems.DeckManager()
+        self.deck_manager.master_deck = []
+        self.deck_manager.draw_pile = []
+        self.deck_manager.discard_pile = []
+        self.hand_list.empty()
+        self.card_list.empty()
+        self.drawn_card = None
+        
+        for c_data in data["deck"]:
+            c = self._create_card(c_data)
+            self.deck_manager.master_deck.append(c)
+            loc = c_data["location"]
+            if loc == "draw": self.deck_manager.draw_pile.append(c)
+            elif loc == "discard": self.deck_manager.discard_pile.append(c)
+            elif loc == "hand": self.hand_list.add(c)
+            elif loc == "drawn": 
+                self.drawn_card = c
+                self.drawn_card._phys_x, self.drawn_card._phys_y = config.DRAWN_CARD_X, config.DRAWN_CARD_Y
+                self.drawn_card.target_x, self.drawn_card.target_y = config.DRAWN_CARD_X, config.DRAWN_CARD_Y
+                self.card_list.add(self.drawn_card)
+
+        self.reposition_hand()
+        
+        self.btn_action = ui_elements.TextButton(config.SCREEN_WIDTH/2, config.SCREEN_HEIGHT - 320, 240, 50, "TAKE CARD", config.COLOR_BTN_ACTION)
+        self.btn_score = ui_elements.TextButton(config.SCREEN_WIDTH - 150, config.SCREEN_HEIGHT - 150, 200, 60, "SCORE HAND", config.COLOR_BTN_SCORE)
+        
+        if self.state == GameState.SHOPPING:
+            self.shop_list.empty()
+            self.shop_buttons = []
+            start_x = config.SCREEN_WIDTH / 2 - 200
+            pos_y = config.SCREEN_HEIGHT / 2 - 50 
+            for i, item_data in enumerate(data.get("shop_items", [])):
+                pos_x = start_x + (i * 200)
+                if item_data["type"] == "Joker":
+                    item = sprites.Joker(item_data["key"], config.JOKER_SCALE)
+                    item.cost = item_data["cost"]
+                    item._phys_x, item._phys_y = pos_x, pos_y
+                    item.target_x, item.target_y = pos_x, pos_y
+                    self.shop_list.add(item)
+                    btn = ui_elements.TextButton(pos_x, pos_y + 170, 120, 40, f"BUY ${item.cost}", config.COLOR_BTN_SHOP)
+                    self.shop_buttons.append(btn)
+                else:
+                    item = sprites.Pack(config.JOKER_SCALE)
+                    item.rect.center = (pos_x, pos_y)
+                    self.shop_list.add(item)
+                    btn = ui_elements.TextButton(pos_x, pos_y + 170, 120, 40, f"BUY ${item_data['cost']}", config.COLOR_PURPLE)
+                    self.shop_buttons.append(btn)
+            self.btn_next_round = ui_elements.TextButton(config.SCREEN_WIDTH - 150, config.SCREEN_HEIGHT - 150, 200, 60, "NEXT LEVEL >", config.COLOR_GREEN)
+            self.update_shop_buttons()
+        
+        elif self.state == GameState.PACK_OPENING:
+            self.pack_card_list.empty()
+            self.btn_pack_mods = []
+            start_x = config.SCREEN_WIDTH / 2 - 250
+            start_y = config.SCREEN_HEIGHT / 2 - 100
+            for i, idx in enumerate(data.get("pack_indices", [])):
+                card = self.deck_manager.master_deck[idx]
+                self.pack_card_list.add(card)
+                row = i // 4
+                col = i % 4
+                tx = start_x + (col * (config.CARD_WIDTH + 20))
+                ty = start_y + (row * (config.CARD_HEIGHT + 20))
+                card._phys_x, card._phys_y = tx, ty
+                card.target_x, card.target_y = tx, ty
+            
+            self.pack_modifiers_offered = data.get("pack_modifiers", [])
+            bx = config.SCREEN_WIDTH / 2 - 100
+            by = config.SCREEN_HEIGHT - 150 
+            for i, mod_key in enumerate(self.pack_modifiers_offered):
+                mod_d = config.MODIFIER_DATA[mod_key]
+                btn = ui_elements.TextButton(bx + (i * 200), by, 180, 60, mod_d['name'], mod_d['color'])
+                self.btn_pack_mods.append(btn)
+            self.btn_pack_skip = ui_elements.TextButton(config.SCREEN_WIDTH - 150, config.SCREEN_HEIGHT - 150, 200, 60, "SKIP", config.COLOR_BTN_DEFAULT)
+            
+        self.audio_manager.start_bg_music()
+        if self.state in [GameState.SHOPPING, GameState.PACK_OPENING]:
+            self.audio_manager.enter_store()
+            
+        self.btn_main_continue.active = True
+        return True
+
     def setup(self):
+        self.state = GameState.MAIN_MENU
+        self.btn_main_continue = ui_elements.TextButton(config.SCREEN_WIDTH/2, config.SCREEN_HEIGHT/2 - 50, 200, 60, "CONTINUE", config.COLOR_BTN_ACTION)
+        self.btn_main_continue.active = (self.save_manager.data.get("current_game") is not None)
+        self.btn_main_new_game = ui_elements.TextButton(config.SCREEN_WIDTH/2, config.SCREEN_HEIGHT/2 + 30, 200, 60, "NEW GAME", config.COLOR_GREEN)
+        self.btn_main_stats = ui_elements.TextButton(config.SCREEN_WIDTH/2, config.SCREEN_HEIGHT/2 + 110, 200, 60, "STATS", config.COLOR_BTN_DEFAULT)
+        self.btn_stats_back = ui_elements.TextButton(config.SCREEN_WIDTH/2, config.SCREEN_HEIGHT - 100, 200, 60, "BACK", config.COLOR_BTN_DEFAULT)
+        
+        self.audio_manager.start_bg_music() 
+
+    def start_new_game(self):
+        self.save_manager.clear_current_game()
         self.score_total = 0
         self.round_level = 1
         self.target_score = config.BASE_TARGET_SCORE
@@ -94,10 +262,12 @@ class WarGame:
         self.animating_cards.empty()
         self.deck_manager = systems.DeckManager()
         
-        self.audio_manager.start_bg_music() 
+        self.btn_main_continue.active = True
+        
         self.start_new_round()
 
     def start_new_round(self):
+        self.save_manager.update_highest_level(self.round_level)
         self.state = GameState.DRAWING
         self.card_list.empty()
         self.hand_list.empty()
@@ -124,6 +294,7 @@ class WarGame:
         self.btn_score = ui_elements.TextButton(config.SCREEN_WIDTH - 150, config.SCREEN_HEIGHT - 150, 200, 60, "SCORE HAND", config.COLOR_BTN_SCORE)
         
         self.draw_new_card()
+        self.sync_save()
 
     def draw_new_card(self):
         card = self.deck_manager.draw_card(self.card_list)
@@ -146,8 +317,12 @@ class WarGame:
                 self.state = GameState.GAME_OVER
                 self.audio_manager.enter_game_over()
                 self.message = "lose: no cards in the deck"
+                self.save_manager.clear_current_game()
             else:
                 self.message = "DECK EMPTY!"
+                
+        if self.drawn_card is not None:
+            self.sync_save()
 
     def enter_shop(self):
         self.state = GameState.SHOPPING
@@ -184,6 +359,7 @@ class WarGame:
 
         self.btn_next_round = ui_elements.TextButton(config.SCREEN_WIDTH - 150, config.SCREEN_HEIGHT - 150, 200, 60, "NEXT LEVEL >", config.COLOR_GREEN)
         self.update_shop_buttons()
+        self.sync_save()
 
     def update_shop_buttons(self):
         for i, item in enumerate(self.shop_list):
@@ -210,6 +386,7 @@ class WarGame:
                     self.shop_buttons.pop(index)
                     self.update_shop_buttons()
                     self.audio_manager.play_buy_joker_fx() 
+                    self.sync_save()
                 else:
                     self.message = "Inventory Full!"
             
@@ -254,6 +431,7 @@ class WarGame:
             self.btn_pack_mods.append(btn)
             
         self.btn_pack_skip = ui_elements.TextButton(config.SCREEN_WIDTH - 150, config.SCREEN_HEIGHT - 150, 200, 60, "SKIP", config.COLOR_BTN_DEFAULT)
+        self.sync_save()
 
     def apply_pack_modifier(self, mod_index):
         selected = [c for c in self.pack_card_list if c.is_selected]
@@ -280,6 +458,7 @@ class WarGame:
         self.state = GameState.SHOPPING
         self.pack_card_list.empty() 
         self.message = "Applied!"
+        self.sync_save()
 
     def score_hand(self):
         self.audio_manager.play_hand_fx()
@@ -290,6 +469,12 @@ class WarGame:
         )
         final_score = base * multi
         self.score_total += final_score
+        
+        hand_type = scoring.get_hand_type(list(self.hand_list))
+        self.save_manager.update_hand_played(hand_type)
+        self.save_manager.update_highest_hand(final_score)
+        self.save_manager.update_highest_score(self.score_total)
+        self.save_manager.update_highest_level(self.round_level)
         
         if coin_bonus > 0: self.coins += coin_bonus
         
@@ -308,6 +493,7 @@ class WarGame:
         if self.hands_played >= self.hands_max:
             self.state = GameState.GAME_OVER
             self.audio_manager.enter_game_over() 
+            self.save_manager.clear_current_game()
         else:
             self.message = f"Scored {final_score}! ({base} x {multi})"
             if coin_bonus > 0: self.message += f" Earned ${coin_bonus}!"
@@ -316,6 +502,9 @@ class WarGame:
                 self.state = GameState.GAME_OVER
                 self.audio_manager.enter_game_over()
                 self.message = "lose: no cards in the deck"
+                self.save_manager.clear_current_game()
+            else:
+                self.sync_save()
 
     def process_swap(self):
         to_remove = [c for c in self.hand_list if c.is_selected]
@@ -353,11 +542,13 @@ class WarGame:
                     self.state = GameState.GAME_OVER
                     self.audio_manager.enter_game_over()
                     self.message = "lose: no cards in the deck"
+                    self.save_manager.clear_current_game()
+        self.sync_save()
 
     def update_game_buttons(self):
-        if self.state == GameState.GAME_OVER:
-            self.btn_action.visible = False
-            self.btn_score.visible = False
+        if self.state not in [GameState.DRAWING, GameState.DECIDING]:
+            if self.btn_action: self.btn_action.visible = False
+            if self.btn_score: self.btn_score.visible = False
             return
         
         self.btn_action.visible = True
@@ -418,6 +609,7 @@ class WarGame:
         
         if self.state == GameState.SHOPPING:
             self.update_shop_buttons()
+        self.sync_save()
 
     def run(self):
         try:
@@ -472,6 +664,14 @@ class WarGame:
             pass # This is now handled in on_update to combine mouse and keyboard focus
         elif self.state == GameState.PACK_OPENING:
             pass # Handled in on_update
+        elif self.state == GameState.MAIN_MENU:
+            if hasattr(self, 'btn_main_continue'):
+                self.btn_main_continue.check_mouse_hover(x, y)
+                self.btn_main_new_game.check_mouse_hover(x, y)
+                self.btn_main_stats.check_mouse_hover(x, y)
+        elif self.state == GameState.STATS:
+            if hasattr(self, 'btn_stats_back'):
+                self.btn_stats_back.check_mouse_hover(x, y)
         else:
             if self.btn_action: self.btn_action.check_mouse_hover(x, y)
             if self.btn_score: self.btn_score.check_mouse_hover(x, y)
@@ -481,6 +681,23 @@ class WarGame:
     def on_mouse_press(self, x, y):
         if self.volume_control.handle_mouse_down(x, y):
             self.audio_manager.set_master_volume(self.volume_control.get_actual_volume())
+            return
+            
+        if self.state == GameState.MAIN_MENU:
+            if hasattr(self, 'btn_main_continue') and self.btn_main_continue.is_clicked(x, y):
+                if hasattr(self, 'previous_state') and self.previous_state:
+                    self.state = self.previous_state
+                else:
+                    self.load_current_state()
+            elif hasattr(self, 'btn_main_new_game') and self.btn_main_new_game.is_clicked(x, y):
+                self.start_new_game()
+            elif hasattr(self, 'btn_main_stats') and self.btn_main_stats.is_clicked(x, y):
+                self.state = GameState.STATS
+            return
+            
+        if self.state == GameState.STATS:
+            if hasattr(self, 'btn_stats_back') and self.btn_stats_back.is_clicked(x, y):
+                self.state = GameState.MAIN_MENU
             return
 
         if self.btn_sell.visible and self.btn_sell.is_clicked(x, y):
@@ -529,7 +746,10 @@ class WarGame:
                     else: self.message = "Select only 2 cards!"
 
         elif self.state == GameState.GAME_OVER:
-            self.setup()
+            self.state = GameState.MAIN_MENU
+            self.btn_main_continue.active = False
+            self.previous_state = None
+            self.audio_manager.start_bg_music()
             return
 
         elif self.state in [GameState.DECIDING, GameState.DRAWING]:
@@ -548,6 +768,20 @@ class WarGame:
             self.audio_manager.set_master_volume(self.volume_control.get_actual_volume())
 
     def on_key_press(self, key):
+        if key == pygame.K_ESCAPE:
+            if self.state in [GameState.DRAWING, GameState.DECIDING, GameState.SHOPPING, GameState.PACK_OPENING]:
+                self.previous_state = self.state
+                self.state = GameState.MAIN_MENU
+                if hasattr(self, 'btn_main_continue'):
+                    self.btn_main_continue.active = True
+            elif self.state == GameState.MAIN_MENU and getattr(self, 'btn_main_continue', None) and self.btn_main_continue.active:
+                if hasattr(self, 'previous_state') and self.previous_state:
+                    self.state = self.previous_state
+                else:
+                    self.load_current_state()
+            elif self.state == GameState.STATS:
+                self.state = GameState.MAIN_MENU
+
         if self.state in [GameState.DECIDING, GameState.DRAWING]:
             if key == pygame.K_SPACE:
                 if self.btn_action and self.btn_action.active and self.btn_action.visible:
@@ -677,6 +911,9 @@ class WarGame:
 
 
     def draw_game_world(self):
+        if self.state in [GameState.MAIN_MENU, GameState.STATS]:
+            return
+            
         if self.state == GameState.SHOPPING:
             ui_elements.draw_shadows(self.screen, self.shop_list)
             self.shop_list.draw(self.screen)
@@ -727,6 +964,42 @@ class WarGame:
         for card in self.animating_cards: card.draw_modifier(self.screen)
 
     def draw_ui(self):
+        if self.state == GameState.MAIN_MENU:
+            title_surf = ui_elements.FONT_20.render(config.SCREEN_TITLE, True, config.COLOR_WHITE)
+            self.screen.blit(title_surf, (config.SCREEN_WIDTH//2 - title_surf.get_width()//2, config.SCREEN_HEIGHT//4))
+            self.btn_main_continue.draw(self.screen)
+            self.btn_main_new_game.draw(self.screen)
+            self.btn_main_stats.draw(self.screen)
+            self.volume_control.draw(self.screen)
+            return
+            
+        if self.state == GameState.STATS:
+            title_surf = ui_elements.FONT_20.render("STATISTICS", True, config.COLOR_WHITE)
+            self.screen.blit(title_surf, (config.SCREEN_WIDTH//2 - title_surf.get_width()//2, config.SCREEN_HEIGHT//4))
+            
+            stats = self.save_manager.data["stats"]
+            stat_surf1 = ui_elements.FONT_16.render(f"Highest Level: {stats['highest_level']}", True, config.COLOR_WHITE)
+            stat_surf2 = ui_elements.FONT_16.render(f"Highest Score: {stats['highest_score']}", True, config.COLOR_WHITE)
+            stat_surf3 = ui_elements.FONT_16.render(f"Highest Single Hand: {stats['highest_hand_score']}", True, config.COLOR_WHITE)
+            
+            self.screen.blit(stat_surf1, (config.SCREEN_WIDTH//2 - stat_surf1.get_width()//2, config.SCREEN_HEIGHT//2 - 60))
+            self.screen.blit(stat_surf2, (config.SCREEN_WIDTH//2 - stat_surf2.get_width()//2, config.SCREEN_HEIGHT//2 - 30))
+            self.screen.blit(stat_surf3, (config.SCREEN_WIDTH//2 - stat_surf3.get_width()//2, config.SCREEN_HEIGHT//2))
+            
+            sy = config.SCREEN_HEIGHT//2 + 40
+            if stats['hands_played']:
+                for h_type, count in sorted(stats['hands_played'].items(), key=lambda x: x[1], reverse=True):
+                    h_surf = ui_elements.FONT_14.render(f"{h_type}: {count}", True, config.COLOR_GOLD)
+                    self.screen.blit(h_surf, (config.SCREEN_WIDTH//2 - h_surf.get_width()//2, sy))
+                    sy += 20
+            else:
+                h_surf = ui_elements.FONT_14.render("No hands played yet.", True, config.COLOR_GOLD)
+                self.screen.blit(h_surf, (config.SCREEN_WIDTH//2 - h_surf.get_width()//2, sy))
+                
+            self.btn_stats_back.draw(self.screen)
+            self.volume_control.draw(self.screen)
+            return
+
         pygame.draw.rect(self.screen, config.COLOR_UI_BG, (0, 0, config.SCREEN_WIDTH, 80))
         
         lvl_surf = ui_elements.FONT_16.render(f"Lvl: {self.round_level}", True, config.COLOR_WHITE)
