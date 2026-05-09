@@ -81,6 +81,7 @@ class WarGame:
         self.mouse_y = 0
         self.shop_focus_index = -1
         self.pack_focus_index = -1
+        self.main_menu_focus_index = -1
 
         # Initialize the CRT overlay
         self.crt_overlay = ui_elements.CRTOverlay(config.SCREEN_WIDTH, config.SCREEN_HEIGHT)
@@ -247,6 +248,7 @@ class WarGame:
         self.btn_main_new_game = ui_elements.TextButton(config.SCREEN_WIDTH/2, config.SCREEN_HEIGHT/2 + 30, 200, 60, "NEW GAME", config.COLOR_GREEN)
         self.btn_main_stats = ui_elements.TextButton(config.SCREEN_WIDTH/2, config.SCREEN_HEIGHT/2 + 110, 200, 60, "STATS", config.COLOR_BTN_DEFAULT)
         self.btn_stats_back = ui_elements.TextButton(config.SCREEN_WIDTH/2, config.SCREEN_HEIGHT - 100, 200, 60, "BACK", config.COLOR_BTN_DEFAULT)
+        self.main_menu_focus_index = 0 if self.btn_main_continue.active else 1
         
         self.audio_manager.start_bg_music() 
 
@@ -698,6 +700,7 @@ class WarGame:
         if self.state == GameState.STATS:
             if hasattr(self, 'btn_stats_back') and self.btn_stats_back.is_clicked(x, y):
                 self.state = GameState.MAIN_MENU
+                self.main_menu_focus_index = 0 if self.btn_main_continue.active else 1
             return
 
         if self.btn_sell.visible and self.btn_sell.is_clicked(x, y):
@@ -750,6 +753,7 @@ class WarGame:
             self.btn_main_continue.active = False
             self.previous_state = None
             self.audio_manager.start_bg_music()
+            self.main_menu_focus_index = 1
             return
 
         elif self.state in [GameState.DECIDING, GameState.DRAWING]:
@@ -774,6 +778,7 @@ class WarGame:
                 self.state = GameState.MAIN_MENU
                 if hasattr(self, 'btn_main_continue'):
                     self.btn_main_continue.active = True
+                    self.main_menu_focus_index = 0
             elif self.state == GameState.MAIN_MENU and getattr(self, 'btn_main_continue', None) and self.btn_main_continue.active:
                 if hasattr(self, 'previous_state') and self.previous_state:
                     self.state = self.previous_state
@@ -781,8 +786,32 @@ class WarGame:
                     self.load_current_state()
             elif self.state == GameState.STATS:
                 self.state = GameState.MAIN_MENU
+                self.main_menu_focus_index = 0 if self.btn_main_continue.active else 1
 
-        if self.state in [GameState.DECIDING, GameState.DRAWING]:
+        if self.state == GameState.MAIN_MENU:
+            navigable_buttons = []
+            if hasattr(self, 'btn_main_continue'):
+                navigable_buttons = [self.btn_main_continue, self.btn_main_new_game, self.btn_main_stats]
+            if navigable_buttons:
+                if key == pygame.K_DOWN:
+                    self.main_menu_focus_index = (self.main_menu_focus_index + 1) % len(navigable_buttons)
+                elif key == pygame.K_UP:
+                    self.main_menu_focus_index = (self.main_menu_focus_index - 1) % len(navigable_buttons)
+                elif key in (pygame.K_SPACE, pygame.K_RETURN, pygame.K_KP_ENTER):
+                    if 0 <= self.main_menu_focus_index < len(navigable_buttons):
+                        focused_button = navigable_buttons[self.main_menu_focus_index]
+                        if focused_button.active:
+                            if focused_button == self.btn_main_continue:
+                                if hasattr(self, 'previous_state') and self.previous_state:
+                                    self.state = self.previous_state
+                                else:
+                                    self.load_current_state()
+                            elif focused_button == self.btn_main_new_game:
+                                self.start_new_game()
+                            elif focused_button == self.btn_main_stats:
+                                self.state = GameState.STATS
+
+        elif self.state in [GameState.DECIDING, GameState.DRAWING]:
             if key == pygame.K_SPACE:
                 if self.btn_action and self.btn_action.active and self.btn_action.visible:
                     self.process_swap()
@@ -855,6 +884,14 @@ class WarGame:
                     elif focused_item == self.btn_pack_skip:
                         self.state = GameState.SHOPPING
                         self.pack_card_list.empty()
+                        
+        elif self.state == GameState.GAME_OVER:
+            if key in (pygame.K_SPACE, pygame.K_RETURN, pygame.K_KP_ENTER):
+                self.state = GameState.MAIN_MENU
+                self.btn_main_continue.active = False
+                self.previous_state = None
+                self.audio_manager.start_bg_music()
+                self.main_menu_focus_index = 1
 
     def on_update(self, delta_time):
             self.audio_manager.update(delta_time)
@@ -871,6 +908,23 @@ class WarGame:
                 self.pack_card_list.update(delta_time)
             
             self.update_game_buttons()
+
+            if self.state == GameState.MAIN_MENU and hasattr(self, 'btn_main_continue'):
+                navigable_buttons = [self.btn_main_continue, self.btn_main_new_game, self.btn_main_stats]
+                mouse_hover_index = -1
+                for i, btn in enumerate(navigable_buttons):
+                    if btn.rect.collidepoint(self.mouse_x, self.mouse_y):
+                        mouse_hover_index = i
+                        break
+                
+                for btn in navigable_buttons:
+                    btn.is_hovered = False
+
+                if mouse_hover_index != -1:
+                    navigable_buttons[mouse_hover_index].is_hovered = True
+                    self.main_menu_focus_index = mouse_hover_index
+                elif hasattr(self, 'main_menu_focus_index') and 0 <= self.main_menu_focus_index < len(navigable_buttons):
+                    navigable_buttons[self.main_menu_focus_index].is_hovered = True
 
             if self.state == GameState.SHOPPING:
                 navigable_buttons = self.shop_buttons + ([self.btn_next_round] if self.btn_next_round else [])
