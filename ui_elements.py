@@ -16,6 +16,8 @@ def init_fonts():
         FONT_16 = pygame.font.SysFont(None, 28)
         FONT_20 = pygame.font.SysFont(None, 34, bold=True)
 
+_shadow_cache = {}
+
 class TextButton:
     def __init__(self, cx, cy, width, height, text, color=config.COLOR_BTN_DEFAULT, text_color=config.COLOR_WHITE):
         self.rect = pygame.Rect(0, 0, width, height)
@@ -38,17 +40,31 @@ class TextButton:
         else:
             draw_color = self.base_color
 
-        pygame.draw.rect(surface, draw_color, self.rect)
-        pygame.draw.rect(surface, config.COLOR_WHITE, self.rect, 2)
+        draw_rect = self.rect.copy()
+        
+        if self.is_hovered and self.active:
+            draw_rect.y -= 4
+            
+            size = (draw_rect.width, draw_rect.height)
+            if size not in _shadow_cache:
+                shadow_surf = pygame.Surface(size, pygame.SRCALPHA)
+                shadow_surf.fill(config.COLOR_SHADOW)
+                _shadow_cache[size] = shadow_surf
+                
+            shadow_surf = _shadow_cache[size]
+            surface.blit(shadow_surf, (draw_rect.x + 5, draw_rect.y + 5))
+
+        pygame.draw.rect(surface, draw_color, draw_rect)
+        pygame.draw.rect(surface, config.COLOR_WHITE, draw_rect, 2)
 
         # Pygame Multiline centering
         lines = self.text.split('\n')
         line_height = FONT_14.get_linesize()
-        start_y = self.rect.centery - (len(lines) * line_height) / 2
+        start_y = draw_rect.centery - (len(lines) * line_height) / 2
         
         for i, line in enumerate(lines):
             text_surf = FONT_14.render(line, True, self.text_color)
-            text_rect = text_surf.get_rect(center=(self.rect.centerx, start_y + (i * line_height) + line_height/2))
+            text_rect = text_surf.get_rect(center=(draw_rect.centerx, start_y + (i * line_height) + line_height/2))
             surface.blit(text_surf, text_rect)
 
     def check_mouse_hover(self, x, y):
@@ -57,8 +73,6 @@ class TextButton:
 
     def is_clicked(self, x, y):
         return self.visible and self.active and self.is_hovered
-
-_shadow_cache = {}
 
 def draw_shadows(surface, sprite_list):
     """ Simplified Pygame drop shadow """
