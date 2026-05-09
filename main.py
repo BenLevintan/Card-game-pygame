@@ -80,6 +80,8 @@ class WarGame:
 
         # Initialize the CRT overlay
         self.crt_overlay = ui_elements.CRTOverlay(config.SCREEN_WIDTH, config.SCREEN_HEIGHT)
+        
+        self.volume_control = ui_elements.VolumeControl(config.SCREEN_WIDTH - 150, 40, width=100)
 
     def setup(self):
         self.score_total = 0
@@ -431,6 +433,9 @@ class WarGame:
                     elif event.type == pygame.MOUSEBUTTONDOWN:
                         if event.button == 1: 
                             self.on_mouse_press(*event.pos)
+                    elif event.type == pygame.MOUSEBUTTONUP:
+                        if event.button == 1:
+                            self.on_mouse_release(*event.pos)
                     elif event.type == pygame.KEYDOWN:
                         self.on_key_press(event.key)
                             
@@ -450,6 +455,9 @@ class WarGame:
                 pygame.time.wait(1000) 
 
     def on_mouse_motion(self, x, y):
+        if self.volume_control.handle_mouse_motion(x, y):
+            self.audio_manager.set_master_volume(self.volume_control.get_actual_volume())
+
         self.hovered_joker = None
         check_lists = [self.joker_list.sprites()]
         if self.state == GameState.SHOPPING: check_lists.append(self.shop_list.sprites())
@@ -471,6 +479,10 @@ class WarGame:
         if self.btn_sell.visible: self.btn_sell.check_mouse_hover(x, y)
 
     def on_mouse_press(self, x, y):
+        if self.volume_control.handle_mouse_down(x, y):
+            self.audio_manager.set_master_volume(self.volume_control.get_actual_volume())
+            return
+
         if self.btn_sell.visible and self.btn_sell.is_clicked(x, y):
             self.sell_joker()
             return
@@ -530,6 +542,10 @@ class WarGame:
             if self.state == GameState.DECIDING and self.discards_left > 0:
                 cards_clicked = [c for c in self.hand_list if c.rect.collidepoint(x, y)]
                 if cards_clicked: cards_clicked[-1].is_selected = not cards_clicked[-1].is_selected
+
+    def on_mouse_release(self, x, y):
+        if self.volume_control.handle_mouse_up(x, y):
+            self.audio_manager.set_master_volume(self.volume_control.get_actual_volume())
 
     def on_key_press(self, key):
         if self.state in [GameState.DECIDING, GameState.DRAWING]:
@@ -724,11 +740,13 @@ class WarGame:
 
         if self.state != GameState.GAME_OVER:
             hands_surf = ui_elements.FONT_16.render(f"Hands: {self.hands_max - self.hands_played}", True, config.COLOR_WHITE)
-            self.screen.blit(hands_surf, (config.SCREEN_WIDTH - 250, 20))
+            self.screen.blit(hands_surf, (config.SCREEN_WIDTH - 320, 20))
             
             c_disc = config.COLOR_BTN_ACTION if self.discards_left > 0 else config.COLOR_RED
             disc_surf = ui_elements.FONT_16.render(f"Discards: {self.discards_left}", True, c_disc)
-            self.screen.blit(disc_surf, (config.SCREEN_WIDTH - 250, 50))
+            self.screen.blit(disc_surf, (config.SCREEN_WIDTH - 320, 50))
+            
+        self.volume_control.draw(self.screen)
 
         if self.state == GameState.SHOPPING:
             msg_surf = ui_elements.FONT_20.render(self.message, True, config.COLOR_WHITE)

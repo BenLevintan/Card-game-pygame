@@ -184,3 +184,70 @@ class CRTOverlay:
         
         # --- 5. Vignette ---
         screen.blit(self.vignette, (0, 0))
+
+class VolumeControl:
+    def __init__(self, x, y, width=100, height=10, initial_vol=0.5):
+        self.x = x
+        self.y = y
+        self.width = width
+        self.height = height
+        
+        self.mute_rect = pygame.Rect(x, y - 10, 20, 20)
+        self.slider_rect = pygame.Rect(x + 30, y - height//2, width, height)
+        
+        self.volume = initial_vol
+        self.is_muted = False
+        self.is_dragging = False
+
+    def draw(self, surface):
+        icon_color = config.COLOR_RED if self.is_muted else config.COLOR_WHITE
+        pygame.draw.rect(surface, icon_color, self.mute_rect, 2, border_radius=4)
+        
+        pygame.draw.polygon(surface, icon_color, [(self.x+4, self.y), (self.x+8, self.y-5), (self.x+8, self.y+5)])
+        if self.is_muted:
+            pygame.draw.line(surface, config.COLOR_RED, (self.x+12, self.y-5), (self.x+18, self.y+5), 2)
+            pygame.draw.line(surface, config.COLOR_RED, (self.x+18, self.y-5), (self.x+12, self.y+5), 2)
+        else:
+            pygame.draw.line(surface, icon_color, (self.x+12, self.y-3), (self.x+12, self.y+3), 2)
+            pygame.draw.line(surface, icon_color, (self.x+16, self.y-6), (self.x+16, self.y+6), 2)
+
+        pygame.draw.rect(surface, (50, 50, 50), self.slider_rect, border_radius=4)
+        if not self.is_muted:
+            fill_width = int(self.width * self.volume)
+            fill_rect = pygame.Rect(self.slider_rect.x, self.slider_rect.y, fill_width, self.slider_rect.height)
+            pygame.draw.rect(surface, config.COLOR_GREEN, fill_rect, border_radius=4)
+            pygame.draw.circle(surface, config.COLOR_WHITE, (self.slider_rect.x + fill_width, self.slider_rect.centery), self.height)
+
+    def update_volume_from_mouse(self, x):
+        rel_x = x - self.slider_rect.x
+        self.volume = max(0.0, min(1.0, rel_x / self.width))
+        if self.volume > 0:
+            self.is_muted = False
+        elif self.volume == 0:
+            self.is_muted = True
+
+    def handle_mouse_down(self, x, y):
+        if self.mute_rect.collidepoint(x, y):
+            self.is_muted = not self.is_muted
+            if not self.is_muted and self.volume == 0:
+                self.volume = 0.5
+            return True
+        elif self.slider_rect.collidepoint(x, y) or self.slider_rect.inflate(0, 10).collidepoint(x, y):
+            self.is_dragging = True
+            self.update_volume_from_mouse(x)
+            return True
+        return False
+        
+    def handle_mouse_up(self, x, y):
+        was_dragging = self.is_dragging
+        self.is_dragging = False
+        return was_dragging
+        
+    def handle_mouse_motion(self, x, y):
+        if self.is_dragging:
+            self.update_volume_from_mouse(x)
+            return True
+        return False
+        
+    def get_actual_volume(self):
+        return 0.0 if self.is_muted else self.volume

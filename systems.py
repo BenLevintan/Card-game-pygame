@@ -32,6 +32,18 @@ class AudioManager:
         
         self.fade_speed = 0.8    
 
+        self.set_master_volume(self.base_volume)
+
+    def set_master_volume(self, volume):
+        self.base_volume = volume
+        
+        if self.bg_target_volume > 0: self.bg_target_volume = self.base_volume
+        if self.store_target_volume > 0: self.store_target_volume = self.base_volume
+        if self.game_over_target_volume > 0: self.game_over_target_volume = self.base_volume
+        
+        for s in [self.card_sound, self.play_hand_sound, self.buy_joker_sound, self.mod_sound]:
+            if s: s.set_volume(volume)
+
     def play_card_sound(self):
         if self.card_sound: self.card_sound.play() # Pygame doesn't natively do random pitch easily
 
