@@ -892,6 +892,11 @@ class WarGame:
                 self.previous_state = None
                 self.audio_manager.start_bg_music()
                 self.main_menu_focus_index = 1
+                
+        elif self.state == GameState.STATS:
+            if key in (pygame.K_SPACE, pygame.K_RETURN, pygame.K_KP_ENTER):
+                self.state = GameState.MAIN_MENU
+                self.main_menu_focus_index = 0 if self.btn_main_continue.active else 1
 
     def on_update(self, delta_time):
             self.audio_manager.update(delta_time)
@@ -961,6 +966,10 @@ class WarGame:
                         self.pack_focus_index = mouse_hover_index
                     elif self.pack_focus_index != -1 and self.pack_focus_index < len(navigable_items):
                         navigable_items[self.pack_focus_index].is_hovered = True
+
+            elif self.state == GameState.STATS:
+                if hasattr(self, 'btn_stats_back'):
+                    self.btn_stats_back.is_hovered = True
 
 
 
