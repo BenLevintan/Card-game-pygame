@@ -119,6 +119,7 @@ class DeckManager:
         for card in self.draw_pile:
             card.should_despawn = False
             card.is_spasming = False
+            card.is_selected = False
             card._phys_x = config.SCREEN_WIDTH + 200
             card._phys_y = config.DRAWN_CARD_Y
             card.target_x = config.SCREEN_WIDTH + 200

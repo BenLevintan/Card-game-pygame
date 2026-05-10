@@ -309,6 +309,7 @@ class WarGame:
             card._phys_x, card._phys_y = start_x, start_y
             card.target_x = config.DRAWN_CARD_X
             card.target_y = config.DRAWN_CARD_Y
+            card.is_selected = False
             
             self.drawn_card = card
             self.state = GameState.DECIDING
