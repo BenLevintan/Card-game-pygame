@@ -68,7 +68,7 @@ class WarGame:
         self.btn_action = None 
         self.btn_score = None
         self.btn_next_round = None
-        self.btn_sell = ui_elements.TextButton(0, 0, 100, 40, "SELL", config.COLOR_BTN_SELL)
+        self.btn_sell = ui_elements.TextButton(0, 0, 100, 40, "SELL")
         self.btn_sell.visible = False
         self.shop_buttons = []
         
@@ -183,8 +183,8 @@ class WarGame:
 
         self.reposition_hand()
         
-        self.btn_action = ui_elements.TextButton(config.SCREEN_WIDTH/2, config.SCREEN_HEIGHT - 320, 240, 50, "TAKE CARD", config.COLOR_BTN_ACTION)
-        self.btn_score = ui_elements.TextButton(config.SCREEN_WIDTH - 150, config.SCREEN_HEIGHT - 150, 200, 60, "SCORE HAND", config.COLOR_BTN_SCORE)
+        self.btn_action = ui_elements.TextButton(config.SCREEN_WIDTH/2, config.SCREEN_HEIGHT - 320, 240, 50, "TAKE CARD")
+        self.btn_score = ui_elements.TextButton(config.SCREEN_WIDTH - 150, config.SCREEN_HEIGHT - 150, 200, 60, "SCORE HAND")
         
         if self.state == GameState.SHOPPING:
             self.shop_list.empty()
@@ -199,15 +199,15 @@ class WarGame:
                     item._phys_x, item._phys_y = pos_x, pos_y
                     item.target_x, item.target_y = pos_x, pos_y
                     self.shop_list.add(item)
-                    btn = ui_elements.TextButton(pos_x, pos_y + 170, 120, 40, f"BUY ${item.cost}", config.COLOR_BTN_SHOP)
+                    btn = ui_elements.TextButton(pos_x, pos_y + 170, 120, 40, f"BUY ${item.cost}")
                     self.shop_buttons.append(btn)
                 else:
                     item = sprites.Pack(config.JOKER_SCALE)
                     item.rect.center = (pos_x, pos_y)
                     self.shop_list.add(item)
-                    btn = ui_elements.TextButton(pos_x, pos_y + 170, 120, 40, f"BUY ${item_data['cost']}", config.COLOR_PURPLE)
+                    btn = ui_elements.TextButton(pos_x, pos_y + 170, 120, 40, f"BUY ${item_data['cost']}")
                     self.shop_buttons.append(btn)
-            self.btn_next_round = ui_elements.TextButton(config.SCREEN_WIDTH - 150, config.SCREEN_HEIGHT - 150, 200, 60, "NEXT LEVEL >", config.COLOR_GREEN)
+            self.btn_next_round = ui_elements.TextButton(config.SCREEN_WIDTH - 150, config.SCREEN_HEIGHT - 150, 200, 60, "NEXT LEVEL >")
             self.update_shop_buttons()
         
         elif self.state == GameState.PACK_OPENING:
@@ -230,9 +230,9 @@ class WarGame:
             by = config.SCREEN_HEIGHT - 150 
             for i, mod_key in enumerate(self.pack_modifiers_offered):
                 mod_d = config.MODIFIER_DATA[mod_key]
-                btn = ui_elements.TextButton(bx + (i * 200), by, 180, 60, mod_d['name'], mod_d['color'])
+                btn = ui_elements.TextButton(bx + (i * 200), by, 180, 60, mod_d['name'])
                 self.btn_pack_mods.append(btn)
-            self.btn_pack_skip = ui_elements.TextButton(config.SCREEN_WIDTH - 150, config.SCREEN_HEIGHT - 150, 200, 60, "SKIP", config.COLOR_BTN_DEFAULT)
+            self.btn_pack_skip = ui_elements.TextButton(config.SCREEN_WIDTH - 150, config.SCREEN_HEIGHT - 150, 200, 60, "SKIP")
             
         self.audio_manager.start_bg_music()
         if self.state in [GameState.SHOPPING, GameState.PACK_OPENING]:
@@ -243,11 +243,11 @@ class WarGame:
 
     def setup(self):
         self.state = GameState.MAIN_MENU
-        self.btn_main_continue = ui_elements.TextButton(config.SCREEN_WIDTH/2, config.SCREEN_HEIGHT/2 - 50, 200, 60, "CONTINUE", config.COLOR_BTN_ACTION)
+        self.btn_main_continue = ui_elements.TextButton(config.SCREEN_WIDTH/2, config.SCREEN_HEIGHT/2 - 50, 200, 60, "CONTINUE")
         self.btn_main_continue.active = (self.save_manager.data.get("current_game") is not None)
-        self.btn_main_new_game = ui_elements.TextButton(config.SCREEN_WIDTH/2, config.SCREEN_HEIGHT/2 + 30, 200, 60, "NEW GAME", config.COLOR_GREEN)
-        self.btn_main_stats = ui_elements.TextButton(config.SCREEN_WIDTH/2, config.SCREEN_HEIGHT/2 + 110, 200, 60, "STATS", config.COLOR_BTN_DEFAULT)
-        self.btn_stats_back = ui_elements.TextButton(config.SCREEN_WIDTH/2, config.SCREEN_HEIGHT - 100, 200, 60, "BACK", config.COLOR_BTN_DEFAULT)
+        self.btn_main_new_game = ui_elements.TextButton(config.SCREEN_WIDTH/2, config.SCREEN_HEIGHT/2 + 30, 200, 60, "NEW GAME")
+        self.btn_main_stats = ui_elements.TextButton(config.SCREEN_WIDTH/2, config.SCREEN_HEIGHT/2 + 110, 200, 60, "STATS")
+        self.btn_stats_back = ui_elements.TextButton(config.SCREEN_WIDTH/2, config.SCREEN_HEIGHT - 100, 200, 60, "BACK")
         self.main_menu_focus_index = 0 if self.btn_main_continue.active else 1
         
         self.audio_manager.start_bg_music() 
@@ -292,8 +292,8 @@ class WarGame:
         
         self.deck_manager.start_round(self.card_list)
 
-        self.btn_action = ui_elements.TextButton(config.SCREEN_WIDTH/2, config.SCREEN_HEIGHT - 320, 240, 50, "TAKE CARD", config.COLOR_BTN_ACTION)
-        self.btn_score = ui_elements.TextButton(config.SCREEN_WIDTH - 150, config.SCREEN_HEIGHT - 150, 200, 60, "SCORE HAND", config.COLOR_BTN_SCORE)
+        self.btn_action = ui_elements.TextButton(config.SCREEN_WIDTH/2, config.SCREEN_HEIGHT - 320, 240, 50, "TAKE CARD")
+        self.btn_score = ui_elements.TextButton(config.SCREEN_WIDTH - 150, config.SCREEN_HEIGHT - 150, 200, 60, "SCORE HAND")
         
         self.draw_new_card()
         self.sync_save()
@@ -360,7 +360,7 @@ class WarGame:
         
         self.shop_focus_index = 0 if self.shop_buttons else -1
 
-        self.btn_next_round = ui_elements.TextButton(config.SCREEN_WIDTH - 150, config.SCREEN_HEIGHT - 150, 200, 60, "NEXT LEVEL >", config.COLOR_GREEN)
+        self.btn_next_round = ui_elements.TextButton(config.SCREEN_WIDTH - 150, config.SCREEN_HEIGHT - 150, 200, 60, "NEXT LEVEL >")
         self.update_shop_buttons()
         self.sync_save()
 
@@ -430,10 +430,10 @@ class WarGame:
         by = config.SCREEN_HEIGHT - 150 
         for i, mod_key in enumerate(self.pack_modifiers_offered):
             data = config.MODIFIER_DATA[mod_key]
-            btn = ui_elements.TextButton(bx + (i * 200), by, 180, 60, data['name'], data['color'])
+            btn = ui_elements.TextButton(bx + (i * 200), by, 180, 60, data['name'])
             self.btn_pack_mods.append(btn)
             
-        self.btn_pack_skip = ui_elements.TextButton(config.SCREEN_WIDTH - 150, config.SCREEN_HEIGHT - 150, 200, 60, "SKIP", config.COLOR_BTN_DEFAULT)
+        self.btn_pack_skip = ui_elements.TextButton(config.SCREEN_WIDTH - 150, config.SCREEN_HEIGHT - 150, 200, 60, "SKIP")
         self.sync_save()
 
     def apply_pack_modifier(self, mod_index):
@@ -560,11 +560,9 @@ class WarGame:
         num_selected = len([c for c in self.hand_list if c.is_selected])
         if num_selected > 0:
             self.btn_action.text = f"DISCARD ({num_selected}) & TAKE"
-            self.btn_action.base_color = (220, 20, 60)
             self.btn_action.active = True
         else:
             self.btn_action.text = "TAKE CARD"
-            self.btn_action.base_color = config.COLOR_BTN_ACTION
             if len(self.hand_list) >= config.MAX_HAND_SIZE:
                 self.btn_action.active = False
                 self.btn_action.text = "HAND FULL"
@@ -1021,7 +1019,7 @@ class WarGame:
         
         for joker in self.joker_list:
             if joker.is_selected:
-                pygame.draw.rect(self.screen, config.COLOR_BTN_SELL, joker.rect, 2)
+                pygame.draw.rect(self.screen, config.COLOR_GOLD, joker.rect, 2)
                 
         ui_elements.draw_shadows(self.screen, self.animating_cards)
         self.animating_cards.draw(self.screen)
@@ -1079,7 +1077,7 @@ class WarGame:
             hands_surf = ui_elements.FONT_16.render(f"Hands: {self.hands_max - self.hands_played}", True, config.COLOR_WHITE)
             self.screen.blit(hands_surf, (config.SCREEN_WIDTH - 320, 20))
             
-            c_disc = config.COLOR_BTN_ACTION if self.discards_left > 0 else config.COLOR_RED
+            c_disc = config.COLOR_WHITE if self.discards_left > 0 else config.COLOR_RED
             disc_surf = ui_elements.FONT_16.render(f"Discards: {self.discards_left}", True, c_disc)
             self.screen.blit(disc_surf, (config.SCREEN_WIDTH - 320, 50))
             

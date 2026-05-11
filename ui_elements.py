@@ -19,11 +19,11 @@ def init_fonts():
 _shadow_cache = {}
 
 class TextButton:
-    def __init__(self, cx, cy, width, height, text, color=config.COLOR_BTN_DEFAULT, text_color=config.COLOR_WHITE):
+    def __init__(self, cx, cy, width, height, text, text_color=config.COLOR_WHITE):
         self.rect = pygame.Rect(0, 0, width, height)
         self.rect.center = (cx, cy)
         self.text = text 
-        self.base_color = color
+        self.base_color = config.COLOR_BTN_DEFAULT
         self.highlight_color = config.COLOR_BTN_HOVER
         self.text_color = text_color
         self.is_hovered = False
