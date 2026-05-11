@@ -89,7 +89,7 @@ class WarGame:
         self.volume_control = ui_elements.VolumeControl(config.SCREEN_WIDTH - 150, 40, width=100)
 
     def sync_save(self):
-        if self.state not in [GameState.MAIN_MENU, GameState.STATS, GameState.GAME_OVER]:
+        if self.state in [GameState.DRAWING, GameState.DECIDING]:
             self.save_current_state()
 
     def _create_card(self, c_data):
@@ -127,16 +127,6 @@ class WarGame:
                 "suit": c.suit, "rank": c.rank, "modifier": c.modifier, "location": loc
             })
         state_data["deck"] = master_deck_data
-
-        if self.state == GameState.SHOPPING:
-            for item in self.shop_list:
-                if isinstance(item, sprites.Joker):
-                    state_data["shop_items"].append({"type": "Joker", "key": item.key, "cost": item.cost})
-                elif isinstance(item, sprites.Pack):
-                    state_data["shop_items"].append({"type": "Pack", "cost": item.cost})
-        elif self.state == GameState.PACK_OPENING:
-            state_data["pack_indices"] = [self.deck_manager.master_deck.index(c) for c in self.pack_card_list if c in self.deck_manager.master_deck]
-            state_data["pack_modifiers"] = self.pack_modifiers_offered
 
         self.save_manager.save_current_game(state_data)
 
@@ -186,57 +176,7 @@ class WarGame:
         self.btn_action = ui_elements.TextButton(config.SCREEN_WIDTH/2, config.SCREEN_HEIGHT - 320, 240, 50, "TAKE CARD")
         self.btn_score = ui_elements.TextButton(config.SCREEN_WIDTH - 150, config.SCREEN_HEIGHT - 150, 200, 60, "SCORE HAND")
         
-        if self.state == GameState.SHOPPING:
-            self.shop_list.empty()
-            self.shop_buttons = []
-            start_x = config.SCREEN_WIDTH / 2 - 200
-            pos_y = config.SCREEN_HEIGHT / 2 - 50 
-            for i, item_data in enumerate(data.get("shop_items", [])):
-                pos_x = start_x + (i * 200)
-                if item_data["type"] == "Joker":
-                    item = sprites.Joker(item_data["key"], config.JOKER_SCALE)
-                    item.cost = item_data["cost"]
-                    item._phys_x, item._phys_y = pos_x, pos_y
-                    item.target_x, item.target_y = pos_x, pos_y
-                    self.shop_list.add(item)
-                    btn = ui_elements.TextButton(pos_x, pos_y + 170, 120, 40, f"BUY ${item.cost}")
-                    self.shop_buttons.append(btn)
-                else:
-                    item = sprites.Pack(config.JOKER_SCALE)
-                    item.rect.center = (pos_x, pos_y)
-                    self.shop_list.add(item)
-                    btn = ui_elements.TextButton(pos_x, pos_y + 170, 120, 40, f"BUY ${item_data['cost']}")
-                    self.shop_buttons.append(btn)
-            self.btn_next_round = ui_elements.TextButton(config.SCREEN_WIDTH - 150, config.SCREEN_HEIGHT - 150, 200, 60, "NEXT LEVEL >")
-            self.update_shop_buttons()
-        
-        elif self.state == GameState.PACK_OPENING:
-            self.pack_card_list.empty()
-            self.btn_pack_mods = []
-            start_x = config.SCREEN_WIDTH / 2 - 250
-            start_y = config.SCREEN_HEIGHT / 2 - 100
-            for i, idx in enumerate(data.get("pack_indices", [])):
-                card = self.deck_manager.master_deck[idx]
-                self.pack_card_list.add(card)
-                row = i // 4
-                col = i % 4
-                tx = start_x + (col * (config.CARD_WIDTH + 20))
-                ty = start_y + (row * (config.CARD_HEIGHT + 20))
-                card._phys_x, card._phys_y = tx, ty
-                card.target_x, card.target_y = tx, ty
-            
-            self.pack_modifiers_offered = data.get("pack_modifiers", [])
-            bx = config.SCREEN_WIDTH / 2 - 100
-            by = config.SCREEN_HEIGHT - 150 
-            for i, mod_key in enumerate(self.pack_modifiers_offered):
-                mod_d = config.MODIFIER_DATA[mod_key]
-                btn = ui_elements.TextButton(bx + (i * 200), by, 180, 60, mod_d['name'])
-                self.btn_pack_mods.append(btn)
-            self.btn_pack_skip = ui_elements.TextButton(config.SCREEN_WIDTH - 150, config.SCREEN_HEIGHT - 150, 200, 60, "SKIP")
-            
         self.audio_manager.start_bg_music()
-        if self.state in [GameState.SHOPPING, GameState.PACK_OPENING]:
-            self.audio_manager.enter_store()
             
         self.btn_main_continue.active = True
         return True

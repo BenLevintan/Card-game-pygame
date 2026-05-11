@@ -46,3 +46,5 @@ pygame-ce is a drop-in replacement for pygame and has better long-term web suppo
 For post-processing effects (bloom, CRT, etc.), the ModernGL + Pygbag combo can work but expect to debug WebGL context issues
 
 The ecosystem is moving fast — Pygbag's GitHub issues/discussions are the best place to check current WebGL shader compatibility status.
+
+[ ] - fix button shadow glitch, flickers as you let go of a button 
