@@ -29,9 +29,33 @@ class TextButton:
         self.is_hovered = False
         self.visible = True
         self.active = True
+        
+        # Animation properties
+        self.current_y_offset = 0.0
+        self.velocity_y = 0.0
+        self.last_time = pygame.time.get_ticks()
 
     def draw(self, surface):
-        if not self.visible: return
+        current_time = pygame.time.get_ticks()
+        if not self.visible: 
+            self.last_time = current_time
+            return
+
+        # Calculate delta time for animation
+        dt = (current_time - self.last_time) / 1000.0
+        self.last_time = current_time
+        dt = min(dt, 0.05)  # Cap delta time to prevent physics explosions on lag spikes
+
+        # Target offset: -6 when hovered/active, 0 otherwise
+        target_y_offset = -6.0 if (self.is_hovered and self.active) else 0.0
+        
+        # Spring physics for overshoot and bounce
+        stiffness = 250.0
+        damping = 15.0
+        
+        acceleration = stiffness * (target_y_offset - self.current_y_offset) - damping * self.velocity_y
+        self.velocity_y += acceleration * dt
+        self.current_y_offset += self.velocity_y * dt
 
         if not self.active:
             draw_color = (100, 100, 100) 
@@ -41,10 +65,10 @@ class TextButton:
             draw_color = self.base_color
 
         draw_rect = self.rect.copy()
+        draw_rect.y += round(self.current_y_offset)
         
-        if self.is_hovered and self.active:
-            draw_rect.y -= 4
-            
+        is_animating = abs(self.current_y_offset) > 0.1 or abs(self.velocity_y) > 0.1
+        if (self.is_hovered and self.active) or is_animating:
             size = (draw_rect.width, draw_rect.height)
             if size not in _shadow_cache:
                 shadow_surf = pygame.Surface(size, pygame.SRCALPHA)
