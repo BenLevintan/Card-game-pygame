@@ -1,6 +1,7 @@
 import pygame
 import config
 import sys
+import random
 
 FONT_14 = None
 FONT_12 = None
@@ -29,6 +30,8 @@ class TextButton:
         self.is_hovered = False
         self.visible = True
         self.active = True
+        self.is_winning_play = False
+        self.sparks = []
         
         # Animation properties
         self.current_y_offset = 0.0
@@ -57,6 +60,29 @@ class TextButton:
         self.velocity_y += acceleration * dt
         self.current_y_offset += self.velocity_y * dt
 
+        # -- Sparks update and draw (drawn behind the button) --
+        if self.is_winning_play and self.active:
+            for _ in range(3):
+                sx = self.rect.centerx + random.uniform(-self.rect.width/2.5, self.rect.width/2.5)
+                sy = self.rect.centery + random.uniform(-self.rect.height/2.5, self.rect.height/2.5)
+                vx = random.uniform(-150, 150)
+                vy = random.uniform(-250, -50)
+                lifetime = random.uniform(0.2, 0.6)
+                self.sparks.append([sx, sy, vx, vy, lifetime, lifetime])
+
+        new_sparks = []
+        for spark in self.sparks:
+            sx, sy, vx, vy, lt, max_lt = spark
+            sx += vx * dt
+            sy += vy * dt
+            vy += 600 * dt # gravity
+            lt -= dt
+            if lt > 0:
+                new_sparks.append([sx, sy, vx, vy, lt, max_lt])
+                spark_color = (255, random.randint(150, 255), 0)
+                pygame.draw.rect(surface, spark_color, (int(sx), int(sy), 4, 4))
+        self.sparks = new_sparks
+
         if not self.active:
             draw_color = (100, 100, 100) 
         elif self.is_hovered:
@@ -67,8 +93,12 @@ class TextButton:
         draw_rect = self.rect.copy()
         draw_rect.y += round(self.current_y_offset)
         
+        if self.is_winning_play and self.active:
+            draw_rect.x += random.randint(-4, 4)
+            draw_rect.y += random.randint(-4, 4)
+
         is_animating = abs(self.current_y_offset) > 0.1 or abs(self.velocity_y) > 0.1
-        if (self.is_hovered and self.active) or is_animating:
+        if (self.is_hovered and self.active) or is_animating or (self.is_winning_play and self.active):
             size = (draw_rect.width, draw_rect.height)
             if size not in _shadow_cache:
                 shadow_surf = pygame.Surface(size, pygame.SRCALPHA)

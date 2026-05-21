@@ -519,10 +519,16 @@ class WarGame:
             if coin_bonus > 0: self.btn_score.text += f"\n(+${coin_bonus})"
             self.hand_details = desc
             self.btn_score.active = True
+            
+            if total >= self.target_score:
+                self.btn_score.is_winning_play = True
+            else:
+                self.btn_score.is_winning_play = False
         else:
             self.btn_score.text = "PLAY HAND"
             self.hand_details = []
             self.btn_score.active = False
+            self.btn_score.is_winning_play = False
 
     def reposition_hand(self):
         sorted_hand = sorted(list(self.hand_list), key=lambda c: (c.value, c.suit))
