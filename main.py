@@ -150,6 +150,9 @@ class WarGame:
             j = sprites.Joker(key, config.JOKER_SCALE)
             self.joker_list.add(j)
         self.reposition_jokers()
+        
+        for j in self.joker_list:
+            j._phys_x, j._phys_y = j.target_x, j.target_y
 
         self.deck_manager = systems.DeckManager()
         self.deck_manager.master_deck = []
@@ -163,9 +166,15 @@ class WarGame:
             c = self._create_card(c_data)
             self.deck_manager.master_deck.append(c)
             loc = c_data["location"]
-            if loc == "draw": self.deck_manager.draw_pile.append(c)
-            elif loc == "discard": self.deck_manager.discard_pile.append(c)
-            elif loc == "hand": self.hand_list.add(c)
+            if loc == "draw": 
+                self.deck_manager.draw_pile.append(c)
+                c._phys_x, c._phys_y = config.SCREEN_WIDTH + 200, config.DRAWN_CARD_Y
+                c.target_x, c.target_y = config.SCREEN_WIDTH + 200, config.DRAWN_CARD_Y
+                self.card_list.add(c)
+            elif loc == "discard": 
+                self.deck_manager.discard_pile.append(c)
+            elif loc == "hand": 
+                self.hand_list.add(c)
             elif loc == "drawn": 
                 self.drawn_card = c
                 self.drawn_card._phys_x, self.drawn_card._phys_y = config.DRAWN_CARD_X, config.DRAWN_CARD_Y
@@ -173,6 +182,9 @@ class WarGame:
                 self.card_list.add(self.drawn_card)
 
         self.reposition_hand()
+        
+        for c in self.hand_list:
+            c._phys_x, c._phys_y = c.target_x, c.target_y
         
         self.btn_action = ui_elements.TextButton(config.SCREEN_WIDTH/2, config.SCREEN_HEIGHT - 320, 240, 50, "TAKE CARD")
         self.btn_score = ui_elements.TextButton(config.SCREEN_WIDTH - 150, config.SCREEN_HEIGHT - 150, 200, 60, "SCORE HAND")
