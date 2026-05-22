@@ -41,6 +41,7 @@ class WarGame:
         self.shop_manager = systems.ShopManager()
         self.audio_manager = systems.AudioManager() 
         self.save_manager = systems.SaveManager()
+        self.last_input_device = 'mouse'
 
         # Pygame Groups
         self.card_list = pygame.sprite.Group()
@@ -567,15 +568,19 @@ class WarGame:
                     if event.type == pygame.QUIT:
                         return
                     elif event.type == pygame.MOUSEMOTION:
+                        self.last_input_device = 'mouse'
                         self.mouse_x, self.mouse_y = event.pos
                         self.on_mouse_motion(self.mouse_x, self.mouse_y)
                     elif event.type == pygame.MOUSEBUTTONDOWN:
+                        self.last_input_device = 'mouse'
                         if event.button == 1: 
                             self.on_mouse_press(*event.pos)
                     elif event.type == pygame.MOUSEBUTTONUP:
+                        self.last_input_device = 'mouse'
                         if event.button == 1:
                             self.on_mouse_release(*event.pos)
                     elif event.type == pygame.KEYDOWN:
+                        self.last_input_device = 'keyboard'
                         self.on_key_press(event.key)
                             
                 self.on_update(dt)
@@ -862,10 +867,11 @@ class WarGame:
             if self.state == GameState.MAIN_MENU and hasattr(self, 'btn_main_continue'):
                 navigable_buttons = [self.btn_main_continue, self.btn_main_new_game, self.btn_main_stats]
                 mouse_hover_index = -1
-                for i, btn in enumerate(navigable_buttons):
-                    if btn.rect.collidepoint(self.mouse_x, self.mouse_y):
-                        mouse_hover_index = i
-                        break
+                if self.last_input_device == 'mouse':
+                    for i, btn in enumerate(navigable_buttons):
+                        if btn.rect.collidepoint(self.mouse_x, self.mouse_y):
+                            mouse_hover_index = i
+                            break
                 
                 for btn in navigable_buttons:
                     btn.is_hovered = False
@@ -880,10 +886,11 @@ class WarGame:
                 navigable_buttons = self.shop_buttons + ([self.btn_next_round] if self.btn_next_round else [])
                 if navigable_buttons:
                     mouse_hover_index = -1
-                    for i, btn in enumerate(navigable_buttons):
-                        if btn.rect.collidepoint(self.mouse_x, self.mouse_y):
-                            mouse_hover_index = i
-                            break
+                    if self.last_input_device == 'mouse':
+                        for i, btn in enumerate(navigable_buttons):
+                            if btn.rect.collidepoint(self.mouse_x, self.mouse_y):
+                                mouse_hover_index = i
+                                break
                     
                     for btn in navigable_buttons:
                         btn.is_hovered = False
@@ -898,10 +905,11 @@ class WarGame:
                 navigable_items = list(self.pack_card_list) + self.btn_pack_mods + ([self.btn_pack_skip] if self.btn_pack_skip else [])
                 if navigable_items:
                     mouse_hover_index = -1
-                    for i, item in enumerate(navigable_items):
-                        if item.rect.collidepoint(self.mouse_x, self.mouse_y):
-                            mouse_hover_index = i
-                            break
+                    if self.last_input_device == 'mouse':
+                        for i, item in enumerate(navigable_items):
+                            if item.rect.collidepoint(self.mouse_x, self.mouse_y):
+                                mouse_hover_index = i
+                                break
                     
                     for item in navigable_items:
                         item.is_hovered = False
