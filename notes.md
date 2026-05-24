@@ -48,4 +48,4 @@ For post-processing effects (bloom, CRT, etc.), the ModernGL + Pygbag combo can 
 The ecosystem is moving fast — Pygbag's GitHub issues/discussions are the best place to check current WebGL shader compatibility status.
 
 [ ] - fix button shadow glitch, flickers as you let go of a button 
-[ ] - bug: when continueing the game the next cards are always the same (decending spades)
+[x] - bug: when continueing the game the next cards are always the same (decending spades)

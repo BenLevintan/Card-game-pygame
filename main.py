@@ -2,6 +2,7 @@ import pygame
 import sys
 import enum
 import warnings
+import random
 
 warnings.filterwarnings("ignore") 
 
@@ -110,7 +111,11 @@ class WarGame:
             "hands_max": self.hands_max,
             "discards_left": self.discards_left,
             "jokers": [j.key for j in self.joker_list],
-            "deck": [],
+            "master_deck": [],
+            "draw_pile": [],
+            "discard_pile": [],
+            "hand": [],
+            "drawn_card": None,
             "shop_items": [],
             "pack_indices": [],
             "pack_modifiers": []
@@ -118,16 +123,15 @@ class WarGame:
         
         master_deck_data = []
         for c in self.deck_manager.master_deck:
-            loc = "master_only"
-            if c in self.deck_manager.draw_pile: loc = "draw"
-            elif c in self.deck_manager.discard_pile: loc = "discard"
-            elif c in self.hand_list: loc = "hand"
-            elif self.drawn_card and c == self.drawn_card: loc = "drawn"
-            
             master_deck_data.append({
-                "suit": c.suit, "rank": c.rank, "modifier": c.modifier, "location": loc
+                "suit": c.suit, "rank": c.rank, "modifier": c.modifier
             })
-        state_data["deck"] = master_deck_data
+        state_data["master_deck"] = master_deck_data
+        
+        state_data["draw_pile"] = [self.deck_manager.master_deck.index(c) for c in self.deck_manager.draw_pile]
+        state_data["discard_pile"] = [self.deck_manager.master_deck.index(c) for c in self.deck_manager.discard_pile]
+        state_data["hand"] = [self.deck_manager.master_deck.index(c) for c in self.hand_list]
+        state_data["drawn_card"] = self.deck_manager.master_deck.index(self.drawn_card) if self.drawn_card else None
 
         self.save_manager.save_current_game(state_data)
 
@@ -162,24 +166,54 @@ class WarGame:
         self.card_list.empty()
         self.drawn_card = None
         
-        for c_data in data["deck"]:
-            c = self._create_card(c_data)
-            self.deck_manager.master_deck.append(c)
-            loc = c_data["location"]
-            if loc == "draw": 
+        if "master_deck" in data:
+            for c_data in data["master_deck"]:
+                c = self._create_card(c_data)
+                self.deck_manager.master_deck.append(c)
+                
+            for idx in data.get("draw_pile", []):
+                c = self.deck_manager.master_deck[idx]
                 self.deck_manager.draw_pile.append(c)
                 c._phys_x, c._phys_y = config.SCREEN_WIDTH + 200, config.DRAWN_CARD_Y
                 c.target_x, c.target_y = config.SCREEN_WIDTH + 200, config.DRAWN_CARD_Y
                 self.card_list.add(c)
-            elif loc == "discard": 
+                
+            for idx in data.get("discard_pile", []):
+                c = self.deck_manager.master_deck[idx]
                 self.deck_manager.discard_pile.append(c)
-            elif loc == "hand": 
+                
+            for idx in data.get("hand", []):
+                c = self.deck_manager.master_deck[idx]
                 self.hand_list.add(c)
-            elif loc == "drawn": 
-                self.drawn_card = c
+                
+            drawn_idx = data.get("drawn_card")
+            if drawn_idx is not None:
+                self.drawn_card = self.deck_manager.master_deck[drawn_idx]
                 self.drawn_card._phys_x, self.drawn_card._phys_y = config.DRAWN_CARD_X, config.DRAWN_CARD_Y
                 self.drawn_card.target_x, self.drawn_card.target_y = config.DRAWN_CARD_X, config.DRAWN_CARD_Y
                 self.card_list.add(self.drawn_card)
+        else:
+            for c_data in data.get("deck", []):
+                c = self._create_card(c_data)
+                self.deck_manager.master_deck.append(c)
+                loc = c_data.get("location")
+                if loc == "draw": 
+                    self.deck_manager.draw_pile.append(c)
+                    c._phys_x, c._phys_y = config.SCREEN_WIDTH + 200, config.DRAWN_CARD_Y
+                    c.target_x, c.target_y = config.SCREEN_WIDTH + 200, config.DRAWN_CARD_Y
+                    self.card_list.add(c)
+                elif loc == "discard": 
+                    self.deck_manager.discard_pile.append(c)
+                elif loc == "hand": 
+                    self.hand_list.add(c)
+                elif loc == "drawn": 
+                    self.drawn_card = c
+                    self.drawn_card._phys_x, self.drawn_card._phys_y = config.DRAWN_CARD_X, config.DRAWN_CARD_Y
+                    self.drawn_card.target_x, self.drawn_card.target_y = config.DRAWN_CARD_X, config.DRAWN_CARD_Y
+                    self.card_list.add(self.drawn_card)
+            
+            # Fix old saves by randomly shuffling the draw pile so it doesn't give descending spades
+            random.shuffle(self.deck_manager.draw_pile)
 
         self.reposition_hand()
         
