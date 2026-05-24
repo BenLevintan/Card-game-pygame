@@ -87,6 +87,7 @@ MODIFIER_DATA = {
 }
 
 PACK_COST = 6
+PACK_IMAGE = resource_path("assets/packs/pack_power_up.png")
 
 # --- AUDIO FILES ---
 MUSIC_BG = resource_path("assets/music/background_1.mp3")

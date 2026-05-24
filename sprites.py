@@ -69,8 +69,14 @@ class Pack(pygame.sprite.Sprite):
         self.cost = config.PACK_COST
         self.is_selected = False
         
-        self.image = pygame.Surface((int(config.JOKER_WIDTH), int(350 * scale)), pygame.SRCALPHA)
-        self.image.fill((200, 50, 50))
+        try:
+            orig = pygame.image.load(config.PACK_IMAGE).convert_alpha()
+            w, h = orig.get_size()
+            self.image = pygame.transform.smoothscale(orig, (int(w * scale), int(h * scale)))
+        except Exception:
+            self.image = pygame.Surface((int(config.JOKER_WIDTH), int(350 * scale)), pygame.SRCALPHA)
+            self.image.fill((200, 50, 50))
+            
         self.rect = self.image.get_rect()
 
 class Card(pygame.sprite.Sprite):
