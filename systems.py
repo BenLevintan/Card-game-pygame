@@ -185,7 +185,18 @@ class ShopManager:
 
 class SaveManager:
     def __init__(self):
+        self.player_index = 1
         self.save_file = "warlatro_save.json"
+        self.data = self.load()
+        
+    def set_player(self, player_index):
+        if hasattr(self, 'data') and self.data:
+            self.save()
+        self.player_index = player_index
+        if player_index == 1:
+            self.save_file = "warlatro_save.json"
+        else:
+            self.save_file = f"warlatro_save_{player_index}.json"
         self.data = self.load()
         
     def load(self):
