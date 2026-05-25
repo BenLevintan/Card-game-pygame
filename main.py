@@ -235,19 +235,19 @@ class WarGame:
         self.btn_main_new_game = ui_elements.TextButton(config.SCREEN_WIDTH/2, config.SCREEN_HEIGHT/2 + 30, 200, 60, "NEW GAME")
         self.btn_main_stats = ui_elements.TextButton(config.SCREEN_WIDTH/2, config.SCREEN_HEIGHT/2 + 110, 200, 60, "STATS")
         
-        self.btn_player_1 = ui_elements.TextButton(config.SCREEN_WIDTH/2 - 120, config.SCREEN_HEIGHT/2 + 190, 100, 40, "PLAYER 1")
-        self.btn_player_2 = ui_elements.TextButton(config.SCREEN_WIDTH/2, config.SCREEN_HEIGHT/2 + 190, 100, 40, "PLAYER 2")
-        self.btn_player_3 = ui_elements.TextButton(config.SCREEN_WIDTH/2 + 120, config.SCREEN_HEIGHT/2 + 190, 100, 40, "PLAYER 3")
-        self.player_buttons = [self.btn_player_1, self.btn_player_2, self.btn_player_3]
-        self.update_player_buttons()
+        self.btn_profile_1 = ui_elements.TextButton(160, config.SCREEN_HEIGHT - 50, 40, 40, "1")
+        self.btn_profile_2 = ui_elements.TextButton(210, config.SCREEN_HEIGHT - 50, 40, 40, "2")
+        self.btn_profile_3 = ui_elements.TextButton(260, config.SCREEN_HEIGHT - 50, 40, 40, "3")
+        self.profile_buttons = [self.btn_profile_1, self.btn_profile_2, self.btn_profile_3]
+        self.update_profile_buttons()
         
         self.btn_stats_back = ui_elements.TextButton(config.SCREEN_WIDTH/2, config.SCREEN_HEIGHT - 100, 200, 60, "BACK")
         self.main_menu_focus_index = 0 if self.btn_main_continue.active else 1
         
         self.audio_manager.start_bg_music() 
         
-    def update_player_buttons(self):
-        for i, btn in enumerate(self.player_buttons):
+    def update_profile_buttons(self):
+        for i, btn in enumerate(self.profile_buttons):
             if i + 1 == self.save_manager.player_index:
                 btn.base_color = config.COLOR_GREEN
             else:
@@ -682,8 +682,8 @@ class WarGame:
                 self.btn_main_continue.check_mouse_hover(x, y)
                 self.btn_main_new_game.check_mouse_hover(x, y)
                 self.btn_main_stats.check_mouse_hover(x, y)
-                if hasattr(self, 'player_buttons'):
-                    for btn in self.player_buttons:
+                if hasattr(self, 'profile_buttons'):
+                    for btn in self.profile_buttons:
                         btn.check_mouse_hover(x, y)
         elif self.state == GameState.STATS:
             if hasattr(self, 'btn_stats_back'):
@@ -709,11 +709,11 @@ class WarGame:
                 self.start_new_game()
             elif hasattr(self, 'btn_main_stats') and self.btn_main_stats.is_clicked(x, y):
                 self.state = GameState.STATS
-            elif hasattr(self, 'player_buttons'):
-                for i, btn in enumerate(self.player_buttons):
+            elif hasattr(self, 'profile_buttons'):
+                for i, btn in enumerate(self.profile_buttons):
                     if btn.is_clicked(x, y):
                         self.save_manager.set_player(i + 1)
-                        self.update_player_buttons()
+                        self.update_profile_buttons()
             return
             
         if self.state == GameState.STATS:
@@ -811,8 +811,8 @@ class WarGame:
             navigable_buttons = []
             if hasattr(self, 'btn_main_continue'):
                 navigable_buttons = [self.btn_main_continue, self.btn_main_new_game, self.btn_main_stats]
-                if hasattr(self, 'player_buttons'):
-                    navigable_buttons.extend(self.player_buttons)
+                if hasattr(self, 'profile_buttons'):
+                    navigable_buttons.extend(self.profile_buttons)
             if navigable_buttons:
                 if key in (pygame.K_DOWN, pygame.K_RIGHT):
                     self.main_menu_focus_index = (self.main_menu_focus_index + 1) % len(navigable_buttons)
@@ -831,10 +831,10 @@ class WarGame:
                                 self.start_new_game()
                             elif focused_button == self.btn_main_stats:
                                 self.state = GameState.STATS
-                            elif hasattr(self, 'player_buttons') and focused_button in self.player_buttons:
-                                idx = self.player_buttons.index(focused_button)
+                            elif hasattr(self, 'profile_buttons') and focused_button in self.profile_buttons:
+                                idx = self.profile_buttons.index(focused_button)
                                 self.save_manager.set_player(idx + 1)
-                                self.update_player_buttons()
+                                self.update_profile_buttons()
 
         elif self.state in [GameState.DECIDING, GameState.DRAWING]:
             if key == pygame.K_SPACE:
@@ -940,8 +940,8 @@ class WarGame:
 
             if self.state == GameState.MAIN_MENU and hasattr(self, 'btn_main_continue'):
                 navigable_buttons = [self.btn_main_continue, self.btn_main_new_game, self.btn_main_stats]
-                if hasattr(self, 'player_buttons'):
-                    navigable_buttons.extend(self.player_buttons)
+                if hasattr(self, 'profile_buttons'):
+                    navigable_buttons.extend(self.profile_buttons)
                 mouse_hover_index = -1
                 if self.last_input_device == 'mouse':
                     for i, btn in enumerate(navigable_buttons):
@@ -1062,8 +1062,10 @@ class WarGame:
             self.btn_main_continue.draw(self.screen)
             self.btn_main_new_game.draw(self.screen)
             self.btn_main_stats.draw(self.screen)
-            if hasattr(self, 'player_buttons'):
-                for btn in self.player_buttons:
+            profile_surf = ui_elements.FONT_20.render("Profile:", True, config.COLOR_WHITE)
+            self.screen.blit(profile_surf, (30, config.SCREEN_HEIGHT - 65))
+            if hasattr(self, 'profile_buttons'):
+                for btn in self.profile_buttons:
                     btn.draw(self.screen)
             self.volume_control.draw(self.screen)
             return
