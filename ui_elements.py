@@ -179,8 +179,6 @@ def draw_tooltip(surface, hovered_joker, mouse_x, mouse_y):
     desc_surf = FONT_12.render(hovered_joker.desc, True, config.COLOR_WHITE)
     surface.blit(desc_surf, (tip_x + 10, tip_y - height + 40))
 
-
-# --- NEW: CRT Overlay Class ---
 class CRTOverlay:
     def __init__(self, width, height):
         self.width = width

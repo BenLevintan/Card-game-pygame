@@ -897,7 +897,6 @@ class WarGame:
     def on_update(self, delta_time):
             self.audio_manager.update(delta_time)
             
-            # NEW: Update the CRT animation
             self.crt_overlay.update(delta_time)
             
             self.card_list.update(delta_time)
