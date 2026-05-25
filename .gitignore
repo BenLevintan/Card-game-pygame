@@ -3,3 +3,6 @@ __pycache__/
 *.pyc
 assets/
 build/
+warlatro_save.json/
+warlatro_save_2.json/
+warlatro_save_3.json/
