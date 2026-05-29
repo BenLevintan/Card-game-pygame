@@ -72,12 +72,40 @@ class Pack(pygame.sprite.Sprite):
         try:
             orig = pygame.image.load(config.PACK_IMAGE).convert_alpha()
             w, h = orig.get_size()
-            self.image = pygame.transform.smoothscale(orig, (int(w * scale), int(h * scale)))
+            self.orig_image = pygame.transform.smoothscale(orig, (int(w * scale), int(h * scale)))
         except Exception:
-            self.image = pygame.Surface((int(config.JOKER_WIDTH), int(350 * scale)), pygame.SRCALPHA)
-            self.image.fill((200, 50, 50))
+            self.orig_image = pygame.Surface((int(config.JOKER_WIDTH), int(350 * scale)), pygame.SRCALPHA)
+            self.orig_image.fill((200, 50, 50))
             
+        self.image = self.orig_image
         self.rect = self.image.get_rect()
+        
+        self.target_x = 0
+        self.target_y = 0
+        self.vel_x = 0
+        self.vel_y = 0
+        self._phys_x = 0
+        self._phys_y = 0
+        self.float_phase = random.uniform(0, 6.28)
+        self.rot_phase = random.uniform(0, 6.28)
+        self.timer = 0.0
+        self.angle = 0
+
+    def update(self, delta_time):
+        self.timer += delta_time
+        
+        dx = self.target_x - self._phys_x
+        dy = self.target_y - self._phys_y
+        self.vel_x = (self.vel_x + dx * config.STIFFNESS) * config.DAMPING
+        self.vel_y = (self.vel_y + dy * config.STIFFNESS) * config.DAMPING
+        self._phys_x += self.vel_x
+        self._phys_y += self.vel_y
+        
+        float_offset = math.sin(self.timer * config.FLOAT_SPEED + self.float_phase) * config.FLOAT_RANGE
+        self.angle = math.sin(self.timer * config.JOKER_ROT_SPEED + self.rot_phase) * config.JOKER_ROT_RANGE
+        
+        self.image = pygame.transform.rotate(self.orig_image, self.angle)
+        self.rect = self.image.get_rect(center=(self._phys_x, self._phys_y + float_offset))
 
 class Card(pygame.sprite.Sprite):
     def __init__(self, suit, rank, scale=1):

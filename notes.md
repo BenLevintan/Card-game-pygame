@@ -49,3 +49,11 @@ The ecosystem is moving fast — Pygbag's GitHub issues/discussions are the best
 
 [ ] - fix button shadow glitch, flickers as you let go of a button 
 [x] - bug: when continueing the game the next cards are always the same (decending spades)
+
+## UI fixes:
+[ ] - use simlper graphics for Joker
+[ ] - make joker cards smaller 
+[ ] - make sure text is readable (especially the joker description)
+[ ] - figure how to make more understandable cards
+[ ] - add textures for Queens Jacks and Kings
+[x] - give the power-up packs floating animations too

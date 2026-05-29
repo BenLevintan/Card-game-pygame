@@ -158,7 +158,8 @@ class ShopManager:
             
             if item_type == 'Pack':
                 item = sprites.Pack(config.JOKER_SCALE)
-                item.rect.center = (pos_x, pos_y)
+                item._phys_x, item._phys_y = pos_x, pos_y
+                item.target_x, item.target_y = pos_x, pos_y
                 shop_list.add(item)
                 btn = ui_elements.TextButton(pos_x, pos_y + 170, 120, 40, f"BUY ${config.PACK_COST}")
                 shop_buttons.append(btn)
