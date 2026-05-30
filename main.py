@@ -201,7 +201,6 @@ class WarGame:
                     self.deck_manager.draw_pile.append(c)
                     c._phys_x, c._phys_y = config.SCREEN_WIDTH + 200, config.DRAWN_CARD_Y
                     c.target_x, c.target_y = config.SCREEN_WIDTH + 200, config.DRAWN_CARD_Y
-                    self.card_list.add(c)
                 elif loc == "discard": 
                     self.deck_manager.discard_pile.append(c)
                 elif loc == "hand": 
@@ -292,7 +291,7 @@ class WarGame:
         self.message = "" 
         self.hand_details = []
         
-        self.deck_manager.start_round(self.card_list)
+        self.deck_manager.start_round()
 
         self.btn_action = ui_elements.TextButton(config.SCREEN_WIDTH/2, config.SCREEN_HEIGHT - 320, 240, 50, "TAKE CARD")
         self.btn_score = ui_elements.TextButton(config.SCREEN_WIDTH - 150, config.SCREEN_HEIGHT - 150, 200, 60, "SCORE HAND")
@@ -301,7 +300,7 @@ class WarGame:
         self.sync_save()
 
     def draw_new_card(self):
-        card = self.deck_manager.draw_card(self.card_list)
+        card = self.deck_manager.draw_card()
         
         if card:
             self.audio_manager.play_card_sound()
@@ -314,6 +313,8 @@ class WarGame:
             card.is_selected = False
             
             self.drawn_card = card
+            if card not in self.card_list:
+                self.card_list.add(card)
             self.state = GameState.DECIDING
         else:
             self.drawn_card = None

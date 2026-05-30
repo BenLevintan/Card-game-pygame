@@ -111,7 +111,7 @@ class DeckManager:
                 card = sprites.Card(suit, rank, config.CARD_SCALE)
                 self.master_deck.append(card)
 
-    def start_round(self, visual_card_list):
+    def start_round(self):
         self.draw_pile = [c for c in self.master_deck if c.modifier != "destroy"]
         self.discard_pile = []
         random.shuffle(self.draw_pile)
@@ -124,10 +124,8 @@ class DeckManager:
             card._phys_y = config.DRAWN_CARD_Y
             card.target_x = config.SCREEN_WIDTH + 200
             card.target_y = config.DRAWN_CARD_Y
-            if card not in visual_card_list:
-                visual_card_list.add(card)
 
-    def draw_card(self, visual_card_list):
+    def draw_card(self):
         if len(self.draw_pile) > 0:
             card = self.draw_pile.pop()
             card.should_despawn = False 

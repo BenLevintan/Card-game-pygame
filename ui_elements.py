@@ -130,7 +130,11 @@ class TextButton:
 
 def draw_shadows(surface, sprite_list):
     """ Simplified Pygame drop shadow """
+    screen_rect = surface.get_rect().inflate(100, 100)
     for sprite in sprite_list:
+        if not screen_rect.colliderect(sprite.rect):
+            continue
+            
         shadow_rect = sprite.rect.copy()
         
         offset_x = 5
