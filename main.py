@@ -4,6 +4,11 @@ import enum
 import warnings
 import random
 
+try:
+    import moderngl
+except ImportError:
+    moderngl = None
+
 warnings.filterwarnings("ignore") 
 
 import config
@@ -24,14 +29,78 @@ class GameState(enum.Enum):
 class WarGame:
     def __init__(self):
         pygame.init()
-        # Create the actual display, but use an off-screen Surface for all drawing
-        self.real_display = pygame.display.set_mode((config.SCREEN_WIDTH, config.SCREEN_HEIGHT))
         
-        # Pygbag Fix: Draw directly to the canvas in WebAssembly to avoid massive texture upload failures
-        if sys.platform in ("emscripten", "wasi"):
-            self.screen = self.real_display
+        # Setup OpenGL attributes for ModernGL
+        pygame.display.gl_set_attribute(pygame.GL_CONTEXT_MAJOR_VERSION, 3)
+        pygame.display.gl_set_attribute(pygame.GL_CONTEXT_MINOR_VERSION, 3)
+        pygame.display.gl_set_attribute(pygame.GL_CONTEXT_PROFILE_MASK, pygame.GL_CONTEXT_PROFILE_CORE)
+        
+        if sys.platform not in ("emscripten", "wasi"):
+            if moderngl:
+                self.real_display = pygame.display.set_mode((config.SCREEN_WIDTH, config.SCREEN_HEIGHT), pygame.OPENGL | pygame.DOUBLEBUF)
+                try:
+                    self.ctx = moderngl.create_context()
+                except Exception:
+                    self.ctx = None
+                    # If context fails, recreate display safely without OpenGL
+                    self.real_display = pygame.display.set_mode((config.SCREEN_WIDTH, config.SCREEN_HEIGHT))
+            else:
+                self.real_display = pygame.display.set_mode((config.SCREEN_WIDTH, config.SCREEN_HEIGHT))
+                self.ctx = None
         else:
-            self.screen = pygame.Surface((config.SCREEN_WIDTH, config.SCREEN_HEIGHT)).convert()
+            self.real_display = pygame.display.set_mode((config.SCREEN_WIDTH, config.SCREEN_HEIGHT))
+            self.ctx = None
+            
+        if self.ctx:
+            # Pygame software surface without convert_alpha() to safely extract raw byte buffer
+            self.screen = pygame.Surface((config.SCREEN_WIDTH, config.SCREEN_HEIGHT), pygame.SRCALPHA)
+            
+            self.screen_texture = self.ctx.texture((config.SCREEN_WIDTH, config.SCREEN_HEIGHT), 4)
+            self.screen_texture.filter = (moderngl.NEAREST, moderngl.NEAREST)
+            self.screen_texture.swizzle = 'BGRA'
+            
+            self.screen_prog = self.ctx.program(
+                vertex_shader='''
+                    #version 330
+                    in vec2 in_position;
+                    in vec2 in_uv;
+                    out vec2 uv;
+                    void main() {
+                        gl_Position = vec4(in_position, 0.0, 1.0);
+                        uv = in_uv;
+                    }
+                ''',
+                fragment_shader='''
+                    #version 330
+                    uniform sampler2D tex;
+                    in vec2 uv;
+                    out vec4 fragColor;
+                    void main() {
+                        fragColor = texture(tex, uv);
+                    }
+                '''
+            )
+            
+            if 'tex' in self.screen_prog:
+                self.screen_prog['tex'].value = 0
+            
+            import struct
+            vertices = [
+                -1.0,  1.0, 0.0, 0.0,
+                 1.0,  1.0, 1.0, 0.0,
+                -1.0, -1.0, 0.0, 1.0,
+                 1.0, -1.0, 1.0, 1.0,
+            ]
+            self.screen_vbo = self.ctx.buffer(struct.pack('16f', *vertices))
+            self.screen_vao = self.ctx.vertex_array(self.screen_prog, [
+                (self.screen_vbo, '2f 2f', 'in_position', 'in_uv')
+            ])
+        else:
+            # Pygbag Fix: Draw directly to the canvas in WebAssembly to avoid massive texture upload failures
+            if sys.platform in ("emscripten", "wasi"):
+                self.screen = self.real_display
+            else:
+                self.screen = pygame.Surface((config.SCREEN_WIDTH, config.SCREEN_HEIGHT)).convert()
         pygame.display.set_caption(config.SCREEN_TITLE)
         
         # Initialize UI fonts AFTER the display is created to prevent WASM invalidation
@@ -86,7 +155,7 @@ class WarGame:
         self.main_menu_focus_index = -1
 
         # Initialize the Background Shader/Animation
-        self.bg_anim = ui_elements.MarbleBackground(config.SCREEN_WIDTH, config.SCREEN_HEIGHT)
+        self.bg_anim = ui_elements.MarbleBackground(config.SCREEN_WIDTH, config.SCREEN_HEIGHT, getattr(self, 'ctx', None))
         
         self.btn_run_info = ui_elements.TextButton(170, config.SCREEN_HEIGHT - 120, 260, 50, "Run Info")
         self.btn_options = ui_elements.TextButton(170, config.SCREEN_HEIGHT - 60, 260, 50, "Options")
@@ -223,7 +292,7 @@ class WarGame:
             c._phys_x, c._phys_y = c.target_x, c.target_y
         
         self.btn_action = ui_elements.TextButton(config.SCREEN_WIDTH/2, config.SCREEN_HEIGHT - 320, 240, 50, "TAKE CARD")
-        self.btn_score = ui_elements.TextButton(config.SCREEN_WIDTH - 150, config.SCREEN_HEIGHT - 150, 200, 60, "SCORE HAND")
+        self.btn_score = ui_elements.TextButton(config.DECK_X - 190, config.DECK_Y, 200, 60, "SCORE HAND")
         
         self.audio_manager.start_bg_music()
             
@@ -297,7 +366,7 @@ class WarGame:
         self.deck_manager.start_round()
 
         self.btn_action = ui_elements.TextButton(config.SCREEN_WIDTH/2, config.SCREEN_HEIGHT - 320, 240, 50, "TAKE CARD")
-        self.btn_score = ui_elements.TextButton(config.SCREEN_WIDTH - 150, config.SCREEN_HEIGHT - 150, 200, 60, "SCORE HAND")
+        self.btn_score = ui_elements.TextButton(config.DECK_X - 190, config.DECK_Y, 200, 60, "SCORE HAND")
         
         self.draw_new_card()
         self.sync_save()
@@ -1240,10 +1309,17 @@ class WarGame:
         ui_elements.draw_tooltip(self.screen, self.hovered_joker, self.mouse_x, self.mouse_y)
 
     def on_draw(self):
-        self.screen.fill(config.COLOR_BG)
+        if getattr(self, 'ctx', None):
+            self.ctx.clear(0.0, 0.0, 0.0, 1.0)
+            self.screen.fill((0, 0, 0, 0))
+        else:
+            self.screen.fill(config.COLOR_BG)
         
         # 1. Apply the animated background
-        self.bg_anim.draw(self.screen)
+        if getattr(self, 'ctx', None):
+            self.bg_anim.draw()
+        else:
+            self.bg_anim.draw(self.screen)
         
         # 2. Draw the game objects
         self.draw_game_world()
@@ -1253,7 +1329,15 @@ class WarGame:
         
         # 4. Blit the fully rendered off-screen surface to the actual browser canvas
         if self.screen is not self.real_display:
-            self.real_display.blit(self.screen, (0, 0))
+            if getattr(self, 'ctx', None) and moderngl:
+                self.screen_texture.write(self.screen.get_view('1'))
+                self.screen_texture.use(0) # IMPORTANT: Bind the UI texture before drawing
+                self.ctx.enable(moderngl.BLEND)
+                self.ctx.blend_func = moderngl.SRC_ALPHA, moderngl.ONE_MINUS_SRC_ALPHA
+                self.screen_vao.render(moderngl.TRIANGLE_STRIP)
+                self.ctx.disable(moderngl.BLEND)
+            else:
+                self.real_display.blit(self.screen, (0, 0))
 
 def main():
     game = WarGame()

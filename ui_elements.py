@@ -3,6 +3,11 @@ import config
 import sys
 import random
 
+try:
+    import moderngl
+except ImportError:
+    moderngl = None
+
 FONT_14 = None
 FONT_12 = None
 FONT_16 = None
@@ -230,15 +235,31 @@ void main() {
 """
 
 class MarbleBackground:
-    def __init__(self, width, height):
+    def __init__(self, width, height, ctx=None):
         self.width = width
         self.height = height
         self.time = 0.0
+        self.ctx = ctx
         
-        # Pygame fallback: pre-render a few swirling gradient circles
-        self.layer1 = self._create_layer((20, 100, 50), 600)
-        self.layer2 = self._create_layer((10, 80, 40), 500)
-        self.layer3 = self._create_layer((40, 140, 70), 400)
+        if self.ctx and moderngl:
+            import struct
+            self.prog = self.ctx.program(
+                vertex_shader=SHADER_VERTEX,
+                fragment_shader=SHADER_FRAGMENT
+            )
+            vertices = [
+                -1.0, -1.0,
+                 1.0, -1.0,
+                -1.0,  1.0,
+                 1.0,  1.0,
+            ]
+            self.vbo = self.ctx.buffer(struct.pack('8f', *vertices))
+            self.vao = self.ctx.vertex_array(self.prog, [(self.vbo, '2f', 'in_position')])
+        else:
+            # Pygame fallback: pre-render a few swirling gradient circles
+            self.layer1 = self._create_layer((20, 100, 50), 600)
+            self.layer2 = self._create_layer((10, 80, 40), 500)
+            self.layer3 = self._create_layer((40, 140, 70), 400)
 
     def _create_layer(self, base_color, size):
         surf = pygame.Surface((size*2, size*2), pygame.SRCALPHA)
@@ -252,23 +273,29 @@ class MarbleBackground:
     def update(self, delta_time):
         self.time += delta_time
 
-    def draw(self, screen):
-        # Base deep green
-        screen.fill((5, 20, 10))
-        
-        # Calculate moving orbits to simulate fluid swirl
-        x1 = self.width / 2 + math.sin(self.time * 0.4) * (self.width / 3)
-        y1 = self.height / 2 + math.cos(self.time * 0.5) * (self.height / 3)
-        
-        x2 = self.width / 2 + math.sin(self.time * 0.3 + 2.0) * (self.width / 2.5)
-        y2 = self.height / 2 + math.cos(self.time * 0.6 + 1.0) * (self.height / 2.5)
-        
-        x3 = self.width / 2 + math.sin(self.time * 0.7 + 4.0) * (self.width / 4)
-        y3 = self.height / 2 + math.cos(self.time * 0.2 + 3.0) * (self.height / 4)
-        
-        screen.blit(self.layer1, (x1 - 600, y1 - 600), special_flags=pygame.BLEND_ADD)
-        screen.blit(self.layer2, (x2 - 500, y2 - 500), special_flags=pygame.BLEND_ADD)
-        screen.blit(self.layer3, (x3 - 400, y3 - 400), special_flags=pygame.BLEND_ADD)
+    def draw(self, screen=None):
+        if self.ctx and moderngl:
+            self.prog['time'].value = self.time
+            if 'resolution' in self.prog:
+                self.prog['resolution'].value = (self.width, self.height)
+            self.vao.render(moderngl.TRIANGLE_STRIP)
+        elif screen:
+            # Base deep green
+            screen.fill((5, 20, 10))
+            
+            # Calculate moving orbits to simulate fluid swirl
+            x1 = self.width / 2 + math.sin(self.time * 0.4) * (self.width / 3)
+            y1 = self.height / 2 + math.cos(self.time * 0.5) * (self.height / 3)
+            
+            x2 = self.width / 2 + math.sin(self.time * 0.3 + 2.0) * (self.width / 2.5)
+            y2 = self.height / 2 + math.cos(self.time * 0.6 + 1.0) * (self.height / 2.5)
+            
+            x3 = self.width / 2 + math.sin(self.time * 0.7 + 4.0) * (self.width / 4)
+            y3 = self.height / 2 + math.cos(self.time * 0.2 + 3.0) * (self.height / 4)
+            
+            screen.blit(self.layer1, (x1 - 600, y1 - 600), special_flags=pygame.BLEND_ADD)
+            screen.blit(self.layer2, (x2 - 500, y2 - 500), special_flags=pygame.BLEND_ADD)
+            screen.blit(self.layer3, (x3 - 400, y3 - 400), special_flags=pygame.BLEND_ADD)
 
 class VolumeControl:
     def __init__(self, x, y, width=100, height=10, initial_vol=0.5):
