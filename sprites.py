@@ -128,8 +128,8 @@ class Card(pygame.sprite.Sprite):
         width, height = int(config.CARD_WIDTH), int(config.CARD_HEIGHT)
 
         self.orig_image = pygame.Surface((width, height), pygame.SRCALPHA)
-        pygame.draw.rect(self.orig_image, (255, 255, 255), (0, 0, width, height), border_radius=10)
-        pygame.draw.rect(self.orig_image, (50, 50, 50), (0, 0, width, height), 2, border_radius=10)
+        pygame.draw.rect(self.orig_image, config.COLOR_BLACK, (0, 0, width, height), border_radius=12)
+        pygame.draw.rect(self.orig_image, (255, 255, 255), (3, 3, width-6, height-6), border_radius=10)
         
         # Load fonts (using system fonts that support symbols)
         pygame.font.init()

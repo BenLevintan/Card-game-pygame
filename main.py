@@ -85,8 +85,11 @@ class WarGame:
         self.pack_focus_index = -1
         self.main_menu_focus_index = -1
 
-        # Initialize the CRT overlay
-        self.crt_overlay = ui_elements.CRTOverlay(config.SCREEN_WIDTH, config.SCREEN_HEIGHT)
+        # Initialize the Background Shader/Animation
+        self.bg_anim = ui_elements.MarbleBackground(config.SCREEN_WIDTH, config.SCREEN_HEIGHT)
+        
+        self.btn_run_info = ui_elements.TextButton(170, config.SCREEN_HEIGHT - 120, 260, 50, "Run Info")
+        self.btn_options = ui_elements.TextButton(170, config.SCREEN_HEIGHT - 60, 260, 50, "Options")
         
         self.volume_control = ui_elements.VolumeControl(config.SCREEN_WIDTH - 150, 40, width=100)
 
@@ -595,16 +598,18 @@ class WarGame:
 
     def reposition_hand(self):
         sorted_hand = sorted(list(self.hand_list), key=lambda c: (c.value, c.suit))
-        start_x = (config.SCREEN_WIDTH - (len(sorted_hand) * (config.CARD_WIDTH + 20))) / 2 + config.CARD_WIDTH / 2
+        total_width = len(sorted_hand) * (config.CARD_WIDTH + 20)
+        start_x = config.SCREEN_WIDTH / 2 - total_width / 2 + config.CARD_WIDTH / 2 + (config.SIDEBAR_WIDTH / 2)
         for i, card in enumerate(sorted_hand):
             card.target_x = start_x + i * (config.CARD_WIDTH + 20)
             card.target_y = config.HAND_Y
             card.is_selected = False
 
     def reposition_jokers(self):
-        start_x = config.SCREEN_WIDTH - 100
+        total_width = len(self.joker_list) * (config.JOKER_WIDTH + 20)
+        start_x = config.SCREEN_WIDTH / 2 - total_width / 2 + config.JOKER_WIDTH / 2 + (config.SIDEBAR_WIDTH / 2)
         for i, joker in enumerate(self.joker_list):
-            tx = start_x - (i * (config.JOKER_WIDTH + 50))
+            tx = start_x + (i * (config.JOKER_WIDTH + 20))
             joker.target_x = tx
             joker.target_y = config.JOKER_Y
 
@@ -692,6 +697,9 @@ class WarGame:
         else:
             if self.btn_action: self.btn_action.check_mouse_hover(x, y)
             if self.btn_score: self.btn_score.check_mouse_hover(x, y)
+            if self.state not in [GameState.MAIN_MENU, GameState.STATS, GameState.GAME_OVER]:
+                if hasattr(self, 'btn_run_info'): self.btn_run_info.check_mouse_hover(x, y)
+                if hasattr(self, 'btn_options'): self.btn_options.check_mouse_hover(x, y)
         
         if self.btn_sell.visible: self.btn_sell.check_mouse_hover(x, y)
 
@@ -786,6 +794,11 @@ class WarGame:
             if self.state == GameState.DECIDING and self.discards_left > 0:
                 cards_clicked = [c for c in self.hand_list if c.rect.collidepoint(x, y)]
                 if cards_clicked: cards_clicked[-1].is_selected = not cards_clicked[-1].is_selected
+
+            if hasattr(self, 'btn_run_info') and self.btn_run_info.is_clicked(x, y):
+                pass 
+            if hasattr(self, 'btn_options') and self.btn_options.is_clicked(x, y):
+                pass
 
     def on_mouse_release(self, x, y):
         if self.volume_control.handle_mouse_up(x, y):
@@ -927,7 +940,7 @@ class WarGame:
     def on_update(self, delta_time):
             self.audio_manager.update(delta_time)
             
-            self.crt_overlay.update(delta_time)
+            self.bg_anim.update(delta_time)
             
             self.card_list.update(delta_time)
             self.hand_list.update(delta_time) 
@@ -1026,12 +1039,13 @@ class WarGame:
 
         else: 
             # Draw the unified playmat background behind the cards
-            playmat_color = (45, 105, 75) # Darker green than COLOR_BG
-            start_x = (config.SCREEN_WIDTH - (config.MAX_HAND_SIZE * (config.CARD_WIDTH + 20))) / 2 + config.CARD_WIDTH / 2
+            playmat_color = (30, 70, 50) 
             total_slots_width = (config.MAX_HAND_SIZE - 1) * (config.CARD_WIDTH + 20) + config.CARD_WIDTH
+            start_x = config.SCREEN_WIDTH / 2 - total_slots_width / 2 + config.CARD_WIDTH / 2 + (config.SIDEBAR_WIDTH / 2)
             pm_x = start_x - config.CARD_WIDTH / 2 - 20
             pm_y = config.HAND_Y - config.CARD_HEIGHT / 2 - 20
-            pygame.draw.rect(self.screen, playmat_color, (pm_x, pm_y, total_slots_width + 40, config.CARD_HEIGHT + 40), border_radius=12)
+            pygame.draw.rect(self.screen, playmat_color, (pm_x, pm_y, total_slots_width + 40, config.CARD_HEIGHT + 40), border_radius=16)
+            pygame.draw.rect(self.screen, config.COLOR_BLACK, (pm_x, pm_y, total_slots_width + 40, config.CARD_HEIGHT + 40), 4, border_radius=16)
 
             ui_elements.draw_shadows(self.screen, self.card_list)
             self.card_list.draw(self.screen)
@@ -1044,6 +1058,12 @@ class WarGame:
                 card.draw_modifier(self.screen)
                 if card.is_selected:
                     pygame.draw.rect(self.screen, config.COLOR_RED, card.rect, 4, border_radius=8)
+                    
+            if self.state not in [GameState.MAIN_MENU, GameState.STATS, GameState.SHOPPING, GameState.PACK_OPENING, GameState.GAME_OVER]:
+                for i in range(min(5, len(self.deck_manager.draw_pile))):
+                    rect = pygame.Rect(config.DECK_X - config.CARD_WIDTH/2 + i*2, config.DECK_Y - config.CARD_HEIGHT/2 - i*2, config.CARD_WIDTH, config.CARD_HEIGHT)
+                    pygame.draw.rect(self.screen, (100, 100, 100), rect, border_radius=10)
+                    pygame.draw.rect(self.screen, config.COLOR_BLACK, rect, 2, border_radius=10)
 
         ui_elements.draw_shadows(self.screen, self.joker_list)
         self.joker_list.draw(self.screen)
@@ -1055,6 +1075,67 @@ class WarGame:
         ui_elements.draw_shadows(self.screen, self.animating_cards)
         self.animating_cards.draw(self.screen)
         for card in self.animating_cards: card.draw_modifier(self.screen)
+
+    def draw_dashboard(self):
+        sidebar_rect = pygame.Rect(20, 20, 300, config.SCREEN_HEIGHT - 40)
+        pygame.draw.rect(self.screen, (35, 38, 40), sidebar_rect, border_radius=16)
+        pygame.draw.rect(self.screen, config.COLOR_BLACK, sidebar_rect, 4, border_radius=16)
+
+        pygame.draw.circle(self.screen, (180, 40, 40), (170, 80), 40)
+        pygame.draw.circle(self.screen, config.COLOR_BLACK, (170, 80), 40, 4)
+        blind_surf = ui_elements.FONT_16.render("Big", True, config.COLOR_WHITE)
+        blind_surf2 = ui_elements.FONT_16.render("Blind", True, config.COLOR_WHITE)
+        self.screen.blit(blind_surf, (170 - blind_surf.get_width()//2, 60))
+        self.screen.blit(blind_surf2, (170 - blind_surf2.get_width()//2, 80))
+
+        pygame.draw.rect(self.screen, (20, 20, 20), (40, 140, 260, 80), border_radius=8)
+        pygame.draw.rect(self.screen, config.COLOR_BLACK, (40, 140, 260, 80), 3, border_radius=8)
+        tgt_title = ui_elements.FONT_14.render("Target Score", True, config.COLOR_WHITE)
+        self.screen.blit(tgt_title, (170 - tgt_title.get_width()//2, 150))
+        tgt_val = ui_elements.FONT_20.render(str(self.target_score), True, config.COLOR_RED)
+        self.screen.blit(tgt_val, (170 - tgt_val.get_width()//2, 180))
+
+        pygame.draw.rect(self.screen, (20, 20, 20), (40, 240, 260, 80), border_radius=8)
+        pygame.draw.rect(self.screen, config.COLOR_BLACK, (40, 240, 260, 80), 3, border_radius=8)
+        cur_title = ui_elements.FONT_14.render("Round Score", True, config.COLOR_WHITE)
+        self.screen.blit(cur_title, (170 - cur_title.get_width()//2, 250))
+        cur_val = ui_elements.FONT_20.render(str(self.score_total), True, config.COLOR_GOLD)
+        self.screen.blit(cur_val, (170 - cur_val.get_width()//2, 280))
+
+        pygame.draw.rect(self.screen, config.COLOR_BLUE, (40, 340, 125, 60), border_radius=8)
+        pygame.draw.rect(self.screen, config.COLOR_BLACK, (40, 340, 125, 60), 3, border_radius=8)
+        
+        pygame.draw.rect(self.screen, config.COLOR_RED, (175, 340, 125, 60), border_radius=8)
+        pygame.draw.rect(self.screen, config.COLOR_BLACK, (175, 340, 125, 60), 3, border_radius=8)
+        
+        chips_val = "0"
+        mult_val = "0"
+        if len(self.hand_list) > 0:
+            s, m, _, _ = scoring.calculate_hand_score(
+                list(self.hand_list), list(self.joker_list), self.run_discards, len(self.deck_manager.draw_pile), self.coins
+            )
+            chips_val = str(s)
+            mult_val = str(m)
+
+        c_surf = ui_elements.FONT_20.render(chips_val, True, config.COLOR_WHITE)
+        m_surf = ui_elements.FONT_20.render(mult_val, True, config.COLOR_WHITE)
+        self.screen.blit(c_surf, (102 - c_surf.get_width()//2, 355))
+        self.screen.blit(m_surf, (237 - m_surf.get_width()//2, 355))
+        
+        x_surf = ui_elements.FONT_20.render("X", True, config.COLOR_WHITE)
+        self.screen.blit(x_surf, (170 - x_surf.get_width()//2, 355))
+
+        lvl_surf = ui_elements.FONT_16.render(f"Ante: {self.round_level}", True, config.COLOR_WHITE)
+        self.screen.blit(lvl_surf, (50, 420))
+        hands_surf = ui_elements.FONT_16.render(f"Hands: {self.hands_max - self.hands_played}", True, config.COLOR_WHITE)
+        self.screen.blit(hands_surf, (50, 450))
+        disc_surf = ui_elements.FONT_16.render(f"Discards: {self.discards_left}", True, config.COLOR_WHITE)
+        self.screen.blit(disc_surf, (50, 480))
+        coin_surf = ui_elements.FONT_16.render(f"Coins: ${self.coins}", True, config.COLOR_GOLD)
+        self.screen.blit(coin_surf, (50, 510))
+
+        self.btn_run_info.draw(self.screen)
+        self.btn_options.draw(self.screen)
 
     def draw_ui(self):
         if self.state == GameState.MAIN_MENU:
@@ -1098,24 +1179,8 @@ class WarGame:
             self.volume_control.draw(self.screen)
             return
 
-        pygame.draw.rect(self.screen, config.COLOR_UI_BG, (0, 0, config.SCREEN_WIDTH, 80))
-        
-        lvl_surf = ui_elements.FONT_16.render(f"Lvl: {self.round_level}", True, config.COLOR_WHITE)
-        self.screen.blit(lvl_surf, (20, 30))
-        
-        target_surf = ui_elements.FONT_20.render(f"Target: {self.score_total} / {self.target_score}", True, config.COLOR_WHITE)
-        self.screen.blit(target_surf, (150, 30))
-        
-        coin_surf = ui_elements.FONT_20.render(f"Coins: ${self.coins}", True, config.COLOR_GOLD)
-        self.screen.blit(coin_surf, (config.SCREEN_WIDTH//2 - coin_surf.get_width()//2, 30))
-
         if self.state != GameState.GAME_OVER:
-            hands_surf = ui_elements.FONT_16.render(f"Hands: {self.hands_max - self.hands_played}", True, config.COLOR_WHITE)
-            self.screen.blit(hands_surf, (config.SCREEN_WIDTH - 320, 20))
-            
-            c_disc = config.COLOR_WHITE if self.discards_left > 0 else config.COLOR_RED
-            disc_surf = ui_elements.FONT_16.render(f"Discards: {self.discards_left}", True, c_disc)
-            self.screen.blit(disc_surf, (config.SCREEN_WIDTH - 320, 50))
+            self.draw_dashboard()
             
         self.volume_control.draw(self.screen)
 
@@ -1155,7 +1220,7 @@ class WarGame:
             
             cur_deck, total_deck = self.deck_manager.get_deck_counts()
             deck_surf = ui_elements.FONT_16.render(f"Deck: {cur_deck} / {total_deck}", True, config.COLOR_WHITE)
-            self.screen.blit(deck_surf, (config.DRAWN_CARD_X - deck_surf.get_width()//2, config.DRAWN_CARD_Y + 130))
+            self.screen.blit(deck_surf, (config.DECK_X - deck_surf.get_width()//2, config.DECK_Y + 130))
 
             start_y = config.SCREEN_HEIGHT - 300
             for i, line in enumerate(self.hand_details):
@@ -1177,11 +1242,11 @@ class WarGame:
     def on_draw(self):
         self.screen.fill(config.COLOR_BG)
         
-        # 1. Draw the game objects and background
-        self.draw_game_world()
+        # 1. Apply the animated background
+        self.bg_anim.draw(self.screen)
         
-        # 2. Apply the CRT shader to the game world
-        self.crt_overlay.draw(self.screen)
+        # 2. Draw the game objects
+        self.draw_game_world()
         
         # 3. Draw UI elements (Text, Buttons) over everything so they stay crisp
         self.draw_ui()

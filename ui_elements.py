@@ -12,9 +12,11 @@ def init_fonts():
     global FONT_14, FONT_12, FONT_16, FONT_20
     if FONT_14 is None:
         pygame.font.init()
+        # For a true 16-bit pixel look, you would load a .ttf like "m6x11.ttf" here.
+        # Using built-in bold as fallback for chunky retro aesthetic
         FONT_14 = pygame.font.SysFont(None, 24, bold=True)
-        FONT_12 = pygame.font.SysFont(None, 20)
-        FONT_16 = pygame.font.SysFont(None, 28)
+        FONT_12 = pygame.font.SysFont(None, 20, bold=True)
+        FONT_16 = pygame.font.SysFont(None, 28, bold=True)
         FONT_20 = pygame.font.SysFont(None, 34, bold=True)
 
 _shadow_cache = {}
@@ -97,19 +99,20 @@ class TextButton:
             draw_rect.x += random.randint(-4, 4)
             draw_rect.y += random.randint(-4, 4)
 
-        is_animating = abs(self.current_y_offset) > 0.1 or abs(self.velocity_y) > 0.1
-        if (self.is_hovered and self.active) or is_animating or (self.is_winning_play and self.active):
-            size = (draw_rect.width, draw_rect.height)
-            if size not in _shadow_cache:
-                shadow_surf = pygame.Surface(size, pygame.SRCALPHA)
-                shadow_surf.fill(config.COLOR_SHADOW)
-                _shadow_cache[size] = shadow_surf
-                
-            shadow_surf = _shadow_cache[size]
-            surface.blit(shadow_surf, (draw_rect.x + 5, draw_rect.y + 5))
+        # Retro Shadow
+        size = (draw_rect.width, draw_rect.height)
+        if size not in _shadow_cache:
+            shadow_surf = pygame.Surface(size, pygame.SRCALPHA)
+            shadow_surf.fill((0, 0, 0, 180)) # Darker drop shadow
+            _shadow_cache[size] = shadow_surf
+            
+        shadow_surf = _shadow_cache[size]
+        surface.blit(shadow_surf, (draw_rect.x + 6, draw_rect.y + 8))
 
-        pygame.draw.rect(surface, draw_color, draw_rect)
-        pygame.draw.rect(surface, config.COLOR_WHITE, draw_rect, 2)
+        # Thick Pixel Outline
+        pygame.draw.rect(surface, config.COLOR_BLACK, draw_rect, border_radius=8)
+        inner_rect = draw_rect.inflate(-6, -6)
+        pygame.draw.rect(surface, draw_color, inner_rect, border_radius=6)
 
         # Pygame Multiline centering
         lines = self.text.split('\n')
@@ -117,6 +120,12 @@ class TextButton:
         start_y = draw_rect.centery - (len(lines) * line_height) / 2
         
         for i, line in enumerate(lines):
+            # Heavy Text Drop Shadow
+            text_surf_shadow = FONT_14.render(line, True, config.COLOR_BLACK)
+            for dx, dy in [(-1,0), (1,0), (0,-1), (0,1), (2, 2)]:
+                text_rect = text_surf_shadow.get_rect(center=(draw_rect.centerx + dx, start_y + (i * line_height) + line_height/2 + dy))
+                surface.blit(text_surf_shadow, text_rect)
+                
             text_surf = FONT_14.render(line, True, self.text_color)
             text_rect = text_surf.get_rect(center=(draw_rect.centerx, start_y + (i * line_height) + line_height/2))
             surface.blit(text_surf, text_rect)
@@ -137,12 +146,12 @@ def draw_shadows(surface, sprite_list):
             
         shadow_rect = sprite.rect.copy()
         
-        offset_x = 5
-        offset_y = 5
+        offset_x = 8
+        offset_y = 12
         
         if getattr(sprite, 'is_selected', False):
-            offset_x += 5
-            offset_y += 15
+            offset_x += 8
+            offset_y += 24
             
         shadow_rect.x += offset_x
         shadow_rect.y += offset_y # Shadow goes down in Pygame
@@ -151,7 +160,7 @@ def draw_shadows(surface, sprite_list):
         size = (shadow_rect.width, shadow_rect.height)
         if size not in _shadow_cache:
             shadow_surf = pygame.Surface(size, pygame.SRCALPHA)
-            shadow_surf.fill(config.COLOR_SHADOW)
+            shadow_surf.fill((0, 0, 0, 160)) # Darker retro drop shadow
             _shadow_cache[size] = shadow_surf
             
         shadow_surf = _shadow_cache[size]
@@ -183,77 +192,83 @@ def draw_tooltip(surface, hovered_joker, mouse_x, mouse_y):
     desc_surf = FONT_12.render(hovered_joker.desc, True, config.COLOR_WHITE)
     surface.blit(desc_surf, (tip_x + 10, tip_y - height + 40))
 
-class CRTOverlay:
+
+import math
+
+SHADER_VERTEX = """
+#version 330
+in vec2 in_position;
+out vec2 uv;
+void main() {
+    uv = in_position;
+    gl_Position = vec4(in_position, 0.0, 1.0);
+}
+"""
+
+SHADER_FRAGMENT = """
+#version 330
+in vec2 uv;
+out vec4 fragColor;
+uniform float time;
+uniform vec2 resolution;
+
+void main() {
+    vec2 p = uv * 3.0;
+    for(int i = 1; i < 5; i++) {
+        vec2 newp = p;
+        newp.x += 0.6 / float(i) * sin(float(i) * p.y + time + 0.3) + 1.0;
+        newp.y += 0.6 / float(i) * cos(float(i) * p.x + time + 0.3) - 1.4;
+        p = newp;
+    }
+    vec3 col = vec3(0.5 * sin(3.0 * p.x) + 0.5,
+                    0.8 * sin(3.0 * p.y) + 0.5,
+                    0.4 * sin(p.x + p.y) + 0.5);
+    // Psychedelic greenish marble
+    col = mix(vec3(0.0, 0.2, 0.1), vec3(0.2, 0.8, 0.4), col.g);
+    fragColor = vec4(col, 1.0);
+}
+"""
+
+class MarbleBackground:
     def __init__(self, width, height):
         self.width = width
         self.height = height
+        self.time = 0.0
         
-        # 1. Create the scanline surface (slightly taller for scrolling)
-        self.scanline_spacing = 8
-        self.scanline_surf = pygame.Surface((width, height + self.scanline_spacing), pygame.SRCALPHA)
-        
-        for y in range(0, height + self.scanline_spacing, self.scanline_spacing):
-            pygame.draw.line(self.scanline_surf, (0, 0, 0, 60), (0, y), (width, y), 4)
-            
-        # 2. Draw a subtle darkened vignette around the edges
-        self.vignette = pygame.Surface((width, height), pygame.SRCALPHA)
-        self.vignette.fill((0, 0, 0, 0)) # Explicitly clear WebGL garbage memory
-        thickness = 240
-        for i in range(thickness):
-            alpha = int(150 * (1.0 - (i / thickness)))
-            pygame.draw.rect(self.vignette, (0, 0, 0, alpha), (i, i, width - i*2, height - i*2), 1)
-        
-        self.y_offset = 0.0
-        
-        # --- Pre-allocated Surfaces for Shaders (Performance Optimization) ---
-        if sys.platform not in ("emscripten", "wasi"):
-            self.pixel_scale = 1.15
-            sw, sh = int(width / self.pixel_scale), int(height / self.pixel_scale)
-            self.small_surf = pygame.Surface((sw, sh)).convert()
-            self.small_red = pygame.Surface((sw, sh)).convert()
-            self.small_cyan = pygame.Surface((sw, sh)).convert()
-            self.small_combined = pygame.Surface((sw, sh)).convert()
+        # Pygame fallback: pre-render a few swirling gradient circles
+        self.layer1 = self._create_layer((20, 100, 50), 600)
+        self.layer2 = self._create_layer((10, 80, 40), 500)
+        self.layer3 = self._create_layer((40, 140, 70), 400)
 
+    def _create_layer(self, base_color, size):
+        surf = pygame.Surface((size*2, size*2), pygame.SRCALPHA)
+        # Create concentric circles fading out to create a soft blob
+        for r in range(size, 0, -10):
+            alpha = int(255 * (1 - (r / size)**1.5))
+            color = base_color + (alpha,)
+            pygame.draw.circle(surf, color, (size, size), r)
+        return surf
+        
     def update(self, delta_time):
-        # Animate scanlines moving downwards
-        self.y_offset += 8 * delta_time
-        if self.y_offset >= self.scanline_spacing:
-            self.y_offset -= self.scanline_spacing
+        self.time += delta_time
 
     def draw(self, screen):
-        """ Draws the overlay onto the target screen """
-        # --- WebAssembly / Pygbag Fallback ---
-        if sys.platform in ("emscripten", "wasi"):
-            screen.blit(self.scanline_surf, (0, int(self.y_offset) - self.scanline_spacing))
-            screen.blit(self.vignette, (0, 0))
-            return
-            
-        try:
-            # --- 1. Scale down (Pixelation step 1) ---
-            pygame.transform.scale(screen, self.small_surf.get_size(), self.small_surf)
-            
-            # --- 2. Chromatic Aberration applied to SMALL surface ---
-            self.small_red.blit(self.small_surf, (0, 0))
-            self.small_red.fill((255, 0, 0), special_flags=pygame.BLEND_RGB_MULT)
-            
-            self.small_cyan.blit(self.small_surf, (0, 0))
-            self.small_cyan.fill((0, 255, 255), special_flags=pygame.BLEND_RGB_MULT)
-            
-            self.small_combined.fill((0, 0, 0))
-            shift_amount = 1 
-            self.small_combined.blit(self.small_red, (0, 0))
-            self.small_combined.blit(self.small_cyan, (shift_amount, 0), special_flags=pygame.BLEND_RGB_ADD)
-            
-            # --- 3. Scale back up directly onto the screen (Pixelation step 2) ---
-            pygame.transform.scale(self.small_combined, screen.get_size(), screen)
-        except Exception:
-            pass # If shaders fail in browser, silently ignore them so the game loop survives
+        # Base deep green
+        screen.fill((5, 20, 10))
         
-        # --- 4. Moving Scanlines ---
-        screen.blit(self.scanline_surf, (0, int(self.y_offset) - self.scanline_spacing))
+        # Calculate moving orbits to simulate fluid swirl
+        x1 = self.width / 2 + math.sin(self.time * 0.4) * (self.width / 3)
+        y1 = self.height / 2 + math.cos(self.time * 0.5) * (self.height / 3)
         
-        # --- 5. Vignette ---
-        screen.blit(self.vignette, (0, 0))
+        x2 = self.width / 2 + math.sin(self.time * 0.3 + 2.0) * (self.width / 2.5)
+        y2 = self.height / 2 + math.cos(self.time * 0.6 + 1.0) * (self.height / 2.5)
+        
+        x3 = self.width / 2 + math.sin(self.time * 0.7 + 4.0) * (self.width / 4)
+        y3 = self.height / 2 + math.cos(self.time * 0.2 + 3.0) * (self.height / 4)
+        
+        screen.blit(self.layer1, (x1 - 600, y1 - 600), special_flags=pygame.BLEND_ADD)
+        screen.blit(self.layer2, (x2 - 500, y2 - 500), special_flags=pygame.BLEND_ADD)
+        screen.blit(self.layer3, (x3 - 400, y3 - 400), special_flags=pygame.BLEND_ADD)
 
 class VolumeControl:
     def __init__(self, x, y, width=100, height=10, initial_vol=0.5):
