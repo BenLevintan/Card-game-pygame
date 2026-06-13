@@ -125,6 +125,11 @@ class Card(pygame.sprite.Sprite):
         self.is_selected = False
         self.modifier = None 
         
+        self.is_hovered = False
+        self.target_angle = 0.0
+        self.current_angle = 0.0
+        self.current_scale = 1.0
+        
         width, height = int(config.CARD_WIDTH), int(config.CARD_HEIGHT)
 
         self.orig_image = pygame.Surface((width, height), pygame.SRCALPHA)
@@ -216,9 +221,15 @@ class Card(pygame.sprite.Sprite):
                 self.alpha = 255
             return 
 
+        target_scale = 1.15 if (self.is_hovered or self.is_selected) else 1.0
+        self.current_scale += (target_scale - self.current_scale) * 15 * delta_time
+        self.current_angle += (self.target_angle - self.current_angle) * 15 * delta_time
+
         actual_target_y = self.target_y
         if self.is_selected:
             actual_target_y -= 30
+        elif self.is_hovered:
+            actual_target_y -= 15
 
         dx = self.target_x - self._phys_x
         dy = actual_target_y - self._phys_y
@@ -233,10 +244,22 @@ class Card(pygame.sprite.Sprite):
                 self.kill()
         else:
             if self.is_selected:
-                self.rect.center = (self._phys_x, self._phys_y)
+                cy = self._phys_y
             else:
                 float_offset = math.sin(self.timer * config.FLOAT_SPEED + self.float_phase) * config.FLOAT_RANGE
-                self.rect.center = (self._phys_x, self._phys_y + float_offset)
+                cy = self._phys_y + float_offset
+                
+            if abs(self.current_scale - 1.0) > 0.01 or abs(self.current_angle) > 0.1:
+                w, h = self.orig_image.get_size()
+                scaled = pygame.transform.smoothscale(self.orig_image, (int(w * self.current_scale), int(h * self.current_scale)))
+                if abs(self.current_angle) > 0.1:
+                    self.image = pygame.transform.rotate(scaled, self.current_angle)
+                else:
+                    self.image = scaled
+            else:
+                self.image = self.orig_image
+                
+            self.rect = self.image.get_rect(center=(self._phys_x, cy))
 
     def draw_modifier(self, screen):
         if self.modifier:

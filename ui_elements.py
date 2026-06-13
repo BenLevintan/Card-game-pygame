@@ -216,6 +216,9 @@ in vec2 uv;
 out vec4 fragColor;
 uniform float time;
 uniform vec2 resolution;
+uniform vec3 color1;
+uniform vec3 color2;
+uniform vec3 color3;
 
 void main() {
     vec2 p = uv * 3.0;
@@ -225,21 +228,30 @@ void main() {
         newp.y += 0.6 / float(i) * cos(float(i) * p.x + time + 0.3) - 1.4;
         p = newp;
     }
-    vec3 col = vec3(0.5 * sin(3.0 * p.x) + 0.5,
-                    0.8 * sin(3.0 * p.y) + 0.5,
-                    0.4 * sin(p.x + p.y) + 0.5);
-    // Psychedelic greenish marble
-    col = mix(vec3(0.0, 0.2, 0.1), vec3(0.2, 0.8, 0.4), col.g);
+    float f = 0.5 * sin(3.0 * p.x) + 0.5;
+    float g = 0.8 * sin(3.0 * p.y) + 0.5;
+    
+    vec3 col = mix(color1, color2, f);
+    col = mix(col, color3, g * 0.6);
+    
     fragColor = vec4(col, 1.0);
 }
 """
 
 class MarbleBackground:
+    PALETTES = {
+        "default": ((0.0, 0.2, 0.1), (0.2, 0.8, 0.4), (0.1, 0.4, 0.2)),
+        "shop": ((0.2, 0.05, 0.05), (0.8, 0.3, 0.1), (0.5, 0.1, 0.1)),
+    }
+
     def __init__(self, width, height, ctx=None):
         self.width = width
         self.height = height
         self.time = 0.0
         self.ctx = ctx
+        
+        self.current_palette = list(self.PALETTES["default"])
+        self.target_palette = list(self.PALETTES["default"])
         
         if self.ctx and moderngl:
             import struct
@@ -257,31 +269,55 @@ class MarbleBackground:
             self.vao = self.ctx.vertex_array(self.prog, [(self.vbo, '2f', 'in_position')])
         else:
             # Pygame fallback: pre-render a few swirling gradient circles
-            self.layer1 = self._create_layer((20, 100, 50), 600)
-            self.layer2 = self._create_layer((10, 80, 40), 500)
-            self.layer3 = self._create_layer((40, 140, 70), 400)
+            self.layer1 = self._create_layer(600)
+            self.layer2 = self._create_layer(500)
+            self.layer3 = self._create_layer(400)
 
-    def _create_layer(self, base_color, size):
+    def _create_layer(self, size):
         surf = pygame.Surface((size*2, size*2), pygame.SRCALPHA)
         # Create concentric circles fading out to create a soft blob
         for r in range(size, 0, -10):
             alpha = int(255 * (1 - (r / size)**1.5))
-            color = base_color + (alpha,)
-            pygame.draw.circle(surf, color, (size, size), r)
+            pygame.draw.circle(surf, (255, 255, 255, alpha), (size, size), r)
         return surf
         
+    def set_state(self, state_name):
+        if state_name == "shop":
+            self.target_palette = list(self.PALETTES["shop"])
+        elif state_name.startswith("level_"):
+            lvl = int(state_name.split("_")[1])
+            # Cycle level background palettes deterministically
+            colors = [
+                ((0.0, 0.2, 0.1), (0.2, 0.8, 0.4), (0.1, 0.4, 0.2)), # Green
+                ((0.05, 0.1, 0.3), (0.2, 0.4, 0.8), (0.1, 0.2, 0.5)), # Blue
+                ((0.2, 0.0, 0.2), (0.6, 0.2, 0.8), (0.4, 0.1, 0.5)), # Purple
+                ((0.3, 0.05, 0.05), (0.9, 0.2, 0.2), (0.6, 0.1, 0.1)), # Red
+                ((0.3, 0.2, 0.0), (0.9, 0.7, 0.1), (0.6, 0.4, 0.0)), # Gold
+            ]
+            self.target_palette = list(colors[(lvl - 1) % len(colors)])
+        else:
+            self.target_palette = list(self.PALETTES["default"])
+
     def update(self, delta_time):
         self.time += delta_time
+        for i in range(3):
+            self.current_palette[i] = tuple(
+                c + (t - c) * 4.0 * delta_time 
+                for c, t in zip(self.current_palette[i], self.target_palette[i])
+            )
 
     def draw(self, screen=None):
         if self.ctx and moderngl:
             self.prog['time'].value = self.time
             if 'resolution' in self.prog:
                 self.prog['resolution'].value = (self.width, self.height)
+            if 'color1' in self.prog: self.prog['color1'].value = self.current_palette[0]
+            if 'color2' in self.prog: self.prog['color2'].value = self.current_palette[1]
+            if 'color3' in self.prog: self.prog['color3'].value = self.current_palette[2]
             self.vao.render(moderngl.TRIANGLE_STRIP)
         elif screen:
-            # Base deep green
-            screen.fill((5, 20, 10))
+            bg_color = tuple(int(c * 255) for c in self.current_palette[0])
+            screen.fill(bg_color)
             
             # Calculate moving orbits to simulate fluid swirl
             x1 = self.width / 2 + math.sin(self.time * 0.4) * (self.width / 3)
@@ -293,9 +329,17 @@ class MarbleBackground:
             x3 = self.width / 2 + math.sin(self.time * 0.7 + 4.0) * (self.width / 4)
             y3 = self.height / 2 + math.cos(self.time * 0.2 + 3.0) * (self.height / 4)
             
-            screen.blit(self.layer1, (x1 - 600, y1 - 600), special_flags=pygame.BLEND_ADD)
-            screen.blit(self.layer2, (x2 - 500, y2 - 500), special_flags=pygame.BLEND_ADD)
-            screen.blit(self.layer3, (x3 - 400, y3 - 400), special_flags=pygame.BLEND_ADD)
+            tint1 = tuple(int(c * 255) for c in self.current_palette[1])
+            tint2 = tuple(int(c * 255) for c in self.current_palette[2])
+            
+            l1 = self.layer1.copy()
+            l1.fill(tint1 + (255,), special_flags=pygame.BLEND_RGBA_MULT)
+            l2 = self.layer2.copy()
+            l2.fill(tint2 + (255,), special_flags=pygame.BLEND_RGBA_MULT)
+            
+            screen.blit(l1, (x1 - 600, y1 - 600), special_flags=pygame.BLEND_ADD)
+            screen.blit(l2, (x2 - 500, y2 - 500), special_flags=pygame.BLEND_ADD)
+            screen.blit(l1, (x3 - 400, y3 - 400), special_flags=pygame.BLEND_ADD)
 
 class VolumeControl:
     def __init__(self, x, y, width=100, height=10, initial_vol=0.5):

@@ -168,7 +168,7 @@ class WarGame:
 
     def _create_card(self, c_data):
         c = sprites.Card(c_data["suit"], c_data["rank"], config.CARD_SCALE)
-        c.modifier = c_data["modifier"]
+        c.modifier = c_data.get("modifier", None)
         return c
 
     def save_current_state(self):
@@ -211,18 +211,18 @@ class WarGame:
         data = self.save_manager.data.get("current_game")
         if not data: return False
         
-        self.state = GameState(data["state"])
-        self.score_total = data["score_total"]
-        self.round_level = data["round_level"]
-        self.target_score = data["target_score"]
-        self.coins = data["coins"]
-        self.run_discards = data["run_discards"]
-        self.hands_played = data["hands_played"]
-        self.hands_max = data["hands_max"]
-        self.discards_left = data["discards_left"]
+        self.state = GameState(data.get("state", GameState.MAIN_MENU.value))
+        self.score_total = data.get("score_total", 0)
+        self.round_level = data.get("round_level", 1)
+        self.target_score = data.get("target_score", config.BASE_TARGET_SCORE)
+        self.coins = data.get("coins", 5)
+        self.run_discards = data.get("run_discards", 0)
+        self.hands_played = data.get("hands_played", 0)
+        self.hands_max = data.get("hands_max", config.BASE_HANDS_TO_PLAY)
+        self.discards_left = data.get("discards_left", config.MAX_DISCARDS)
         
         self.joker_list.empty()
-        for key in data["jokers"]:
+        for key in data.get("jokers", []):
             j = sprites.Joker(key, config.JOKER_SCALE)
             self.joker_list.add(j)
         self.reposition_jokers()
@@ -291,10 +291,12 @@ class WarGame:
         for c in self.hand_list:
             c._phys_x, c._phys_y = c.target_x, c.target_y
         
-        self.btn_action = ui_elements.TextButton(config.SCREEN_WIDTH/2, config.SCREEN_HEIGHT - 320, 240, 50, "TAKE CARD")
-        self.btn_score = ui_elements.TextButton(config.DECK_X - 190, config.DECK_Y, 200, 60, "SCORE HAND")
+        btn_center_x = config.SCREEN_WIDTH / 2 + config.SIDEBAR_WIDTH / 2
+        self.btn_action = ui_elements.TextButton(btn_center_x - 130, config.SCREEN_HEIGHT - 80, 240, 60, "DISCARD")
+        self.btn_score = ui_elements.TextButton(btn_center_x + 130, config.SCREEN_HEIGHT - 80, 240, 60, "PLAY HAND")
         
         self.audio_manager.start_bg_music()
+        self.bg_anim.set_state(f"level_{self.round_level}")
             
         self.btn_main_continue.active = True
         return True
@@ -365,9 +367,11 @@ class WarGame:
         
         self.deck_manager.start_round()
 
-        self.btn_action = ui_elements.TextButton(config.SCREEN_WIDTH/2, config.SCREEN_HEIGHT - 320, 240, 50, "TAKE CARD")
-        self.btn_score = ui_elements.TextButton(config.DECK_X - 190, config.DECK_Y, 200, 60, "SCORE HAND")
+        btn_center_x = config.SCREEN_WIDTH / 2 + config.SIDEBAR_WIDTH / 2
+        self.btn_action = ui_elements.TextButton(btn_center_x - 130, config.SCREEN_HEIGHT - 80, 240, 60, "DISCARD")
+        self.btn_score = ui_elements.TextButton(btn_center_x + 130, config.SCREEN_HEIGHT - 80, 240, 60, "PLAY HAND")
         
+        self.bg_anim.set_state(f"level_{self.round_level}")
         self.draw_new_card()
         self.sync_save()
 
@@ -405,6 +409,7 @@ class WarGame:
     def enter_shop(self):
         self.state = GameState.SHOPPING
         self.message = "SHOP PHASE"
+        self.bg_anim.set_state("shop")
         
         self.audio_manager.enter_store()
         
@@ -571,6 +576,7 @@ class WarGame:
         if self.hands_played >= self.hands_max:
             self.state = GameState.GAME_OVER
             self.audio_manager.enter_game_over() 
+            self.bg_anim.set_state("default")
             self.save_manager.clear_current_game()
         else:
             self.message = f"Scored {final_score}! ({base} x {multi})"
@@ -579,6 +585,7 @@ class WarGame:
             if self.drawn_card is None and len(self.deck_manager.draw_pile) == 0 and len(self.hand_list) == 0:
                 self.state = GameState.GAME_OVER
                 self.audio_manager.enter_game_over()
+                self.bg_anim.set_state("default")
                 self.message = "lose: no cards in the deck"
                 self.save_manager.clear_current_game()
             else:
@@ -619,6 +626,7 @@ class WarGame:
                 if self.score_total < self.target_score:
                     self.state = GameState.GAME_OVER
                     self.audio_manager.enter_game_over()
+                    self.bg_anim.set_state("default")
                     self.message = "lose: no cards in the deck"
                     self.save_manager.clear_current_game()
         self.sync_save()
@@ -650,8 +658,7 @@ class WarGame:
                 list(self.hand_list), list(self.joker_list), self.run_discards, cards_in_deck, self.coins
             )
             total = s * m
-            self.btn_score.text = f"PLAY HAND\n{s} x {m} = {total}"
-            if coin_bonus > 0: self.btn_score.text += f"\n(+${coin_bonus})"
+            self.btn_score.text = "PLAY HAND"
             self.hand_details = desc
             self.btn_score.active = True
             
@@ -667,11 +674,16 @@ class WarGame:
 
     def reposition_hand(self):
         sorted_hand = sorted(list(self.hand_list), key=lambda c: (c.value, c.suit))
-        total_width = len(sorted_hand) * (config.CARD_WIDTH + 20)
-        start_x = config.SCREEN_WIDTH / 2 - total_width / 2 + config.CARD_WIDTH / 2 + (config.SIDEBAR_WIDTH / 2)
+        hand_size = len(sorted_hand)
+        if hand_size == 0: return
+        
+        spacing = min(config.CARD_WIDTH + 10, 500 / hand_size) if hand_size > 1 else config.CARD_WIDTH
+        total_width = (hand_size - 1) * spacing
+        start_x = config.SCREEN_WIDTH / 2 - total_width / 2 + (config.SIDEBAR_WIDTH / 2)
         for i, card in enumerate(sorted_hand):
-            card.target_x = start_x + i * (config.CARD_WIDTH + 20)
+            card.target_x = start_x + i * spacing
             card.target_y = config.HAND_Y
+            card.target_angle = (i - (hand_size - 1) / 2.0) * -3.0 
             card.is_selected = False
 
     def reposition_jokers(self):
@@ -763,12 +775,22 @@ class WarGame:
         elif self.state == GameState.STATS:
             if hasattr(self, 'btn_stats_back'):
                 self.btn_stats_back.check_mouse_hover(x, y)
-        else:
-            if self.btn_action: self.btn_action.check_mouse_hover(x, y)
-            if self.btn_score: self.btn_score.check_mouse_hover(x, y)
-            if self.state not in [GameState.MAIN_MENU, GameState.STATS, GameState.GAME_OVER]:
-                if hasattr(self, 'btn_run_info'): self.btn_run_info.check_mouse_hover(x, y)
-                if hasattr(self, 'btn_options'): self.btn_options.check_mouse_hover(x, y)
+                
+        # Handle hand card hover physics sorting accurately
+        if self.state in [GameState.DECIDING, GameState.DRAWING]:
+            for card in self.hand_list:
+                card.is_hovered = False
+            sorted_hand = sorted(list(self.hand_list), key=lambda c: c.target_x)
+            for card in reversed(sorted_hand):
+                if card.rect.collidepoint(x, y):
+                    card.is_hovered = True
+                    break
+        
+        if self.btn_action: self.btn_action.check_mouse_hover(x, y)
+        if self.btn_score: self.btn_score.check_mouse_hover(x, y)
+        if self.state not in [GameState.MAIN_MENU, GameState.STATS, GameState.GAME_OVER]:
+            if hasattr(self, 'btn_run_info'): self.btn_run_info.check_mouse_hover(x, y)
+            if hasattr(self, 'btn_options'): self.btn_options.check_mouse_hover(x, y)
         
         if self.btn_sell.visible: self.btn_sell.check_mouse_hover(x, y)
 
@@ -860,9 +882,10 @@ class WarGame:
             if self.btn_score and self.btn_score.is_clicked(x, y):
                 self.score_hand()
                 return
-            if self.state == GameState.DECIDING and self.discards_left > 0:
-                cards_clicked = [c for c in self.hand_list if c.rect.collidepoint(x, y)]
-                if cards_clicked: cards_clicked[-1].is_selected = not cards_clicked[-1].is_selected
+            if self.state == GameState.DECIDING:
+                sorted_hand = sorted(list(self.hand_list), key=lambda c: c.target_x)
+                cards_clicked = [c for c in reversed(sorted_hand) if c.rect.collidepoint(x, y)]
+                if cards_clicked: cards_clicked[0].is_selected = not cards_clicked[0].is_selected
 
             if hasattr(self, 'btn_run_info') and self.btn_run_info.is_clicked(x, y):
                 pass 
@@ -927,7 +950,7 @@ class WarGame:
                 if self.btn_score and self.btn_score.active and self.btn_score.visible:
                     self.score_hand()
             elif key in (pygame.K_1, pygame.K_2, pygame.K_3, pygame.K_4, pygame.K_5):
-                if self.state == GameState.DECIDING and self.discards_left > 0:
+                if self.state == GameState.DECIDING:
                     index = key - pygame.K_1
                     sorted_hand = sorted(list(self.hand_list), key=lambda c: (c.value, c.suit))
                     if index < len(sorted_hand):
@@ -1109,24 +1132,23 @@ class WarGame:
         else: 
             # Draw the unified playmat background behind the cards
             playmat_color = (30, 70, 50) 
-            total_slots_width = (config.MAX_HAND_SIZE - 1) * (config.CARD_WIDTH + 20) + config.CARD_WIDTH
-            start_x = config.SCREEN_WIDTH / 2 - total_slots_width / 2 + config.CARD_WIDTH / 2 + (config.SIDEBAR_WIDTH / 2)
-            pm_x = start_x - config.CARD_WIDTH / 2 - 20
-            pm_y = config.HAND_Y - config.CARD_HEIGHT / 2 - 20
-            pygame.draw.rect(self.screen, playmat_color, (pm_x, pm_y, total_slots_width + 40, config.CARD_HEIGHT + 40), border_radius=16)
-            pygame.draw.rect(self.screen, config.COLOR_BLACK, (pm_x, pm_y, total_slots_width + 40, config.CARD_HEIGHT + 40), 4, border_radius=16)
+            pm_width = min(config.CARD_WIDTH + 10, 500 / config.MAX_HAND_SIZE) * (config.MAX_HAND_SIZE - 1) + config.CARD_WIDTH + 40
+            pm_x = config.SCREEN_WIDTH / 2 - pm_width / 2 + (config.SIDEBAR_WIDTH / 2)
+            pm_y = config.HAND_Y - config.CARD_HEIGHT / 2 - 40
+            pygame.draw.rect(self.screen, playmat_color, (pm_x, pm_y, pm_width, config.CARD_HEIGHT + 60), border_radius=16)
+            pygame.draw.rect(self.screen, config.COLOR_BLACK, (pm_x, pm_y, pm_width, config.CARD_HEIGHT + 60), 4, border_radius=16)
 
             ui_elements.draw_shadows(self.screen, self.card_list)
             self.card_list.draw(self.screen)
             for card in self.card_list: card.draw_modifier(self.screen)
             
-            ui_elements.draw_shadows(self.screen, self.hand_list)
-            self.hand_list.draw(self.screen)
-            
-            for card in self.hand_list:
+            # Custom Draw Order to put hovered cards overlapping on top
+            sorted_hand = sorted(list(self.hand_list), key=lambda c: c.target_x)
+            sorted_hand.sort(key=lambda c: 1 if c.is_selected or getattr(c, 'is_hovered', False) else 0)
+            ui_elements.draw_shadows(self.screen, sorted_hand)
+            for card in sorted_hand:
+                self.screen.blit(card.image, card.rect)
                 card.draw_modifier(self.screen)
-                if card.is_selected:
-                    pygame.draw.rect(self.screen, config.COLOR_RED, card.rect, 4, border_radius=8)
                     
             if self.state not in [GameState.MAIN_MENU, GameState.STATS, GameState.SHOPPING, GameState.PACK_OPENING, GameState.GAME_OVER]:
                 for i in range(min(5, len(self.deck_manager.draw_pile))):
@@ -1137,10 +1159,6 @@ class WarGame:
         ui_elements.draw_shadows(self.screen, self.joker_list)
         self.joker_list.draw(self.screen)
         
-        for joker in self.joker_list:
-            if joker.is_selected:
-                pygame.draw.rect(self.screen, config.COLOR_GOLD, joker.rect, 2)
-                
         ui_elements.draw_shadows(self.screen, self.animating_cards)
         self.animating_cards.draw(self.screen)
         for card in self.animating_cards: card.draw_modifier(self.screen)
@@ -1283,10 +1301,6 @@ class WarGame:
             self.screen.blit(rs_surf, (config.SCREEN_WIDTH//2 - rs_surf.get_width()//2, config.SCREEN_HEIGHT//2 + 50))
 
         else: 
-            if self.message:
-                msg_surf = ui_elements.FONT_16.render(self.message, True, config.COLOR_WHITE)
-                self.screen.blit(msg_surf, (config.SCREEN_WIDTH//2 - msg_surf.get_width()//2, config.DRAWN_CARD_Y - 100))
-            
             cur_deck, total_deck = self.deck_manager.get_deck_counts()
             deck_surf = ui_elements.FONT_16.render(f"Deck: {cur_deck} / {total_deck}", True, config.COLOR_WHITE)
             self.screen.blit(deck_surf, (config.DECK_X - deck_surf.get_width()//2, config.DECK_Y + 130))
@@ -1295,11 +1309,6 @@ class WarGame:
             for i, line in enumerate(self.hand_details):
                 line_surf = ui_elements.FONT_16.render(line, True, config.COLOR_GOLD)
                 self.screen.blit(line_surf, (config.SCREEN_WIDTH - 200, start_y + (i * 25)))
-
-            if self.state != GameState.GAME_OVER:
-                pygame.draw.rect(self.screen, config.COLOR_WHITE, (config.DRAWN_CARD_X - config.CARD_WIDTH/2 - 5, config.DRAWN_CARD_Y - config.CARD_HEIGHT/2 - 5, config.CARD_WIDTH + 10, config.CARD_HEIGHT + 10), 2, border_radius=8)
-                nc_surf = ui_elements.FONT_12.render("NEW CARD", True, config.COLOR_WHITE)
-                self.screen.blit(nc_surf, (config.DRAWN_CARD_X - nc_surf.get_width()//2, config.DRAWN_CARD_Y - 120))
 
             if self.btn_action: self.btn_action.draw(self.screen)
             if self.btn_score: self.btn_score.draw(self.screen)
