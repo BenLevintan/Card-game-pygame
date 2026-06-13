@@ -145,6 +145,10 @@ class TextButton:
 def draw_shadows(surface, sprite_list):
     """ Simplified Pygame drop shadow """
     screen_rect = surface.get_rect().inflate(100, 100)
+    
+    # Create a single screen-sized surface to prevent alpha stacking
+    shadow_layer = pygame.Surface(surface.get_size(), pygame.SRCALPHA)
+    
     for sprite in sprite_list:
         if not screen_rect.colliderect(sprite.rect):
             continue
@@ -165,16 +169,25 @@ def draw_shadows(surface, sprite_list):
         size = (shadow_rect.width, shadow_rect.height)
         if size not in _shadow_cache:
             shadow_surf = pygame.Surface(size, pygame.SRCALPHA)
-            shadow_surf.fill((0, 0, 0, 160)) # Darker retro drop shadow
+            pygame.draw.rect(shadow_surf, (0, 0, 0, 255), shadow_surf.get_rect(), border_radius=12)
             _shadow_cache[size] = shadow_surf
             
         shadow_surf = _shadow_cache[size]
         
+        angle = 0
         if hasattr(sprite, 'angle') and sprite.angle != 0:
-            shadow_surf = pygame.transform.rotate(shadow_surf, sprite.angle)
+            angle = sprite.angle
+        elif hasattr(sprite, 'current_angle') and sprite.current_angle != 0:
+            angle = sprite.current_angle
+            
+        if angle != 0:
+            shadow_surf = pygame.transform.rotate(shadow_surf, angle)
             shadow_rect = shadow_surf.get_rect(center=shadow_rect.center)
             
-        surface.blit(shadow_surf, shadow_rect)
+        shadow_layer.blit(shadow_surf, shadow_rect)
+        
+    shadow_layer.set_alpha(160)
+    surface.blit(shadow_layer, (0, 0))
 
 def draw_tooltip(surface, hovered_joker, mouse_x, mouse_y):
     if not hovered_joker:
