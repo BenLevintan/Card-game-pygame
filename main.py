@@ -1273,7 +1273,7 @@ class WarGame:
 
         if self.state == GameState.SHOPPING:
             msg_surf = ui_elements.FONT_20.render(self.message, True, config.COLOR_WHITE)
-            self.screen.blit(msg_surf, (config.SCREEN_WIDTH//2 - msg_surf.get_width()//2, 150))
+            self.screen.blit(msg_surf, (config.SCREEN_WIDTH//2 - msg_surf.get_width()//2, 280))
             for btn in self.shop_buttons: btn.draw(self.screen)
             if self.btn_next_round: self.btn_next_round.draw(self.screen)
 

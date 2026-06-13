@@ -149,7 +149,7 @@ class ShopManager:
         
         start_x = config.SCREEN_WIDTH / 2 - 200
         # Pygame Flip: Bottom half is + instead of -
-        pos_y = config.SCREEN_HEIGHT / 2 - 50 
+        pos_y = config.SCREEN_HEIGHT / 2 + 50 
         
         for i, item_type in enumerate(slots):
             pos_x = start_x + (i * 200)
@@ -159,7 +159,7 @@ class ShopManager:
                 item._phys_x, item._phys_y = pos_x, pos_y
                 item.target_x, item.target_y = pos_x, pos_y
                 shop_list.add(item)
-                btn = ui_elements.TextButton(pos_x, pos_y + 170, 120, 40, f"BUY ${config.PACK_COST}")
+                btn = ui_elements.TextButton(pos_x, pos_y + 120, 120, 40, f"BUY ${config.PACK_COST}")
                 shop_buttons.append(btn)
                 
             elif item_type == 'Joker' and available_jokers:
@@ -170,7 +170,7 @@ class ShopManager:
                 item._phys_x, item._phys_y = pos_x, pos_y
                 item.target_x, item.target_y = pos_x, pos_y
                 shop_list.add(item)
-                btn = ui_elements.TextButton(pos_x, pos_y + 170, 120, 40, f"BUY ${item.cost}")
+                btn = ui_elements.TextButton(pos_x, pos_y + 120, 120, 40, f"BUY ${item.cost}")
                 shop_buttons.append(btn)
 
     def get_pack_cards(self, master_deck):
